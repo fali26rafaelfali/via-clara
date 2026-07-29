@@ -88,6 +88,14 @@ function formatNavigationDistance(metres: number) {
   return metres < 1000 ? `${Math.max(10, Math.round(metres / 10) * 10)} m` : formatDistance(metres);
 }
 
+function alertAge(timestamp: number) {
+  const minutes = Math.max(0, Math.round((Date.now() - timestamp) / 60000));
+  if (minutes < 1) return "Ahora mismo";
+  if (minutes < 60) return `Hace ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  return `Hace ${hours} ${hours === 1 ? "hora" : "horas"}`;
+}
+
 function arrivalTime(seconds: number) {
   return new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" }).format(
     new Date(Date.now() + seconds * 1000),
@@ -176,6 +184,7 @@ export default function Home() {
   const [roadAlerts, setRoadAlerts] = useState<RoadAlert[]>([]);
   const [showReport, setShowReport] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(true);
+  const [selectedAlert, setSelectedAlert] = useState<RoadAlert | null>(null);
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current) return;
@@ -228,7 +237,10 @@ export default function Home() {
         element.title = `${details.label} · ${alert.source}`;
         element.setAttribute("aria-label", element.title);
         element.style.backgroundColor = details.color;
-        element.onclick = () => setStatus(`${details.label}${alert.road ? ` en ${alert.road}` : ""} · Fuente: ${alert.source}`);
+        element.onclick = () => {
+          setSelectedAlert(alert);
+          setStatus(`${details.label}${alert.road ? ` en ${alert.road}` : ""} · Fuente: ${alert.source}`);
+        };
         return new Marker({ element }).setLngLat(alert.coordinates).addTo(map);
       });
     };
@@ -545,6 +557,28 @@ export default function Home() {
     }
   }
 
+  async function voteAlert(alert: RoadAlert, present: boolean) {
+    if (!alert.id.startsWith("shared-")) return;
+    setStatus("Registrando tu confirmación…");
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/vote_road_report`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          p_report_id: alert.id.replace("shared-", ""),
+          p_device_id: deviceId(),
+          p_present: present,
+        }),
+      });
+      if (!response.ok) throw new Error("vote");
+      setSelectedAlert(null);
+      setStatus(present ? "Gracias: aviso confirmado" : "Gracias: revisaremos si el aviso ya terminó");
+      await loadSafetyAlerts(origin);
+    } catch {
+      setStatus("No se pudo registrar el voto. Prueba de nuevo.");
+    }
+  }
+
   function locateMe() {
     if (!navigator.geolocation) {
       setStatus("Este navegador no permite usar el GPS");
@@ -749,6 +783,31 @@ export default function Home() {
                 ))}
               </div>
               <small className="safety-note">Por seguridad, comunica el aviso con el vehículo detenido o mediante un acompañante.</small>
+            </div>
+          </div>
+        )}
+        {selectedAlert && (
+          <div className="alert-detail" role="dialog" aria-modal="true" aria-label="Detalle de incidencia">
+            <div className="alert-detail-card">
+              <button className="alert-detail-close" onClick={() => setSelectedAlert(null)} aria-label="Cerrar">×</button>
+              <span className="alert-detail-icon" style={{ background: ALERT_DETAILS[selectedAlert.kind].color }}>
+                {ALERT_DETAILS[selectedAlert.kind].icon}
+              </span>
+              <small>{selectedAlert.source === "Comunidad" ? "COMUNIDAD VÍA CLARA" : `FUENTE ${selectedAlert.source.toUpperCase()}`}</small>
+              <strong>{ALERT_DETAILS[selectedAlert.kind].label}</strong>
+              {selectedAlert.road && <p>{selectedAlert.road}{selectedAlert.municipality ? ` · ${selectedAlert.municipality}` : ""}</p>}
+              <div className="alert-detail-meta">
+                <span>{alertAge(selectedAlert.createdAt)}</span>
+                {selectedAlert.source === "Comunidad" && <span>{selectedAlert.confirmations} confirmaciones</span>}
+              </div>
+              {selectedAlert.id.startsWith("shared-") ? (
+                <div className="alert-votes">
+                  <button className="still-there" onClick={() => void voteAlert(selectedAlert, true)}>✓ Sigue ahí</button>
+                  <button onClick={() => void voteAlert(selectedAlert, false)}>× Ya no está</button>
+                </div>
+              ) : (
+                <p className="official-note">Información de consulta. Los votos comunitarios solo se aplican a avisos de usuarios.</p>
+              )}
             </div>
           </div>
         )}
