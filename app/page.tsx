@@ -14,6 +14,7 @@ import {
 
 type Coordinates = [number, number];
 type RouteKind = "calm" | "fast" | "eco";
+type TravelMode = "Normal" | "Familia" | "Caravana";
 type Place = { label: string; coordinates: Coordinates };
 type SavedPlace = Place & { kind: "Casa" | "Trabajo" | "Favorito" };
 type NearbyPlace = Place & { type: string };
@@ -49,6 +50,7 @@ const MADRID: Coordinates = [-3.7038, 40.4168];
 const NAVIGATION_BLUE = "#1677ff";
 const SUPABASE_URL = "https://vbzhxoanlqpqwxfidgao.supabase.co";
 const SUPABASE_KEY = "sb_publishable_dXBO8BiyoQkEVlqldNDesQ_HPoeQ0yn";
+const ZBE_CITIES = ["madrid", "barcelona", "sevilla", "málaga", "granada", "bilbao", "valladolid", "alicante", "oviedo", "pamplona", "salamanca", "vitoria", "tarragona", "girona", "castellón"];
 const ALERT_DETAILS: Record<AlertKind, { label: string; icon: string; color: string; expires: number }> = {
   radar: { label: "Radar fijo", icon: "◉", color: "#be3c32", expires: 30 * 24 * 60 * 60 * 1000 },
   accident: { label: "Accidente", icon: "⚠", color: "#d74836", expires: 90 * 60 * 1000 },
@@ -157,6 +159,8 @@ export default function Home() {
   const roadAlertsRef = useRef<RoadAlert[]>([]);
   const latestOrigin = useRef<Coordinates>(MADRID);
   const alertRefreshTimer = useRef<number | null>(null);
+  const navigationStartedAt = useRef(0);
+  const restReminderSpoken = useRef(false);
   const [origin, setOrigin] = useState<Coordinates>(MADRID);
   const [destination, setDestination] = useState("");
   const [destinationPoint, setDestinationPoint] = useState<Coordinates | null>(null);
@@ -183,7 +187,10 @@ export default function Home() {
   const [energyPrice, setEnergyPrice] = useState(1.6);
   const [avoidTolls, setAvoidTolls] = useState(false);
   const [avoidHighways, setAvoidHighways] = useState(false);
-  const [weather, setWeather] = useState<{ temperature: number; wind: number } | null>(null);
+  const [weather, setWeather] = useState<{ temperature: number; wind: number; precipitation: number; code: number } | null>(null);
+  const [routeWeather, setRouteWeather] = useState<{ label: string; level: "good" | "warning" | "danger" } | null>(null);
+  const [travelMode, setTravelMode] = useState<TravelMode>("Normal");
+  const [environmentalBadge, setEnvironmentalBadge] = useState<"Sin etiqueta" | "B" | "C" | "ECO" | "0">("C");
   const [roadAlerts, setRoadAlerts] = useState<RoadAlert[]>([]);
   const [showReport, setShowReport] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(true);
@@ -225,6 +232,8 @@ export default function Home() {
       if (settings.vehicle) setVehicle(settings.vehicle);
       if (settings.consumption) setConsumption(settings.consumption);
       if (settings.energyPrice) setEnergyPrice(settings.energyPrice);
+      if (settings.travelMode) setTravelMode(settings.travelMode);
+      if (settings.environmentalBadge) setEnvironmentalBadge(settings.environmentalBadge);
       setAvoidTolls(Boolean(settings.avoidTolls));
       setAvoidHighways(Boolean(settings.avoidHighways));
     } catch {
@@ -258,8 +267,8 @@ export default function Home() {
   }, [roadAlerts]);
 
   useEffect(() => {
-    localStorage.setItem("via-clara-vehicle", JSON.stringify({ vehicle, consumption, energyPrice, avoidTolls, avoidHighways }));
-  }, [vehicle, consumption, energyPrice, avoidTolls, avoidHighways]);
+    localStorage.setItem("via-clara-vehicle", JSON.stringify({ vehicle, consumption, energyPrice, avoidTolls, avoidHighways, travelMode, environmentalBadge }));
+  }, [vehicle, consumption, energyPrice, avoidTolls, avoidHighways, travelMode, environmentalBadge]);
 
   useEffect(() => {
     if (!destinationPoint) {
@@ -267,9 +276,14 @@ export default function Home() {
       return;
     }
     const [longitude, latitude] = destinationPoint;
-    void fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m`)
+    void fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m,precipitation,weather_code`)
       .then((response) => response.json())
-      .then((data) => setWeather({ temperature: data.current.temperature_2m, wind: data.current.wind_speed_10m }))
+      .then((data) => setWeather({
+        temperature: data.current.temperature_2m,
+        wind: data.current.wind_speed_10m,
+        precipitation: data.current.precipitation,
+        code: data.current.weather_code,
+      }))
       .catch(() => setWeather(null));
   }, [destinationPoint]);
 
@@ -360,6 +374,24 @@ export default function Home() {
     if (selected === "eco") return [...routes].sort((a, b) => a.distance - b.distance)[0];
     return [...routes].sort((a, b) => b.duration - a.duration)[0];
   })();
+
+  useEffect(() => {
+    if (!activeRoute) {
+      setRouteWeather(null);
+      return;
+    }
+    const coordinates = activeRoute.geometry.coordinates as Coordinates[];
+    const midpoint = coordinates[Math.floor(coordinates.length / 2)];
+    void fetch(`https://api.open-meteo.com/v1/forecast?latitude=${midpoint[1]}&longitude=${midpoint[0]}&current=wind_speed_10m,precipitation,weather_code`)
+      .then((response) => response.json())
+      .then((data) => {
+        const current = data.current;
+        if (current.weather_code >= 95 || current.wind_speed_10m >= 60) setRouteWeather({ label: "Riesgo de tormenta o viento fuerte en ruta", level: "danger" });
+        else if (current.precipitation > 0 || current.weather_code >= 45 || current.wind_speed_10m >= 35) setRouteWeather({ label: "Conduce con precaución: tiempo adverso en ruta", level: "warning" });
+        else setRouteWeather({ label: "Condiciones meteorológicas favorables", level: "good" });
+      })
+      .catch(() => setRouteWeather(null));
+  }, [activeRoute]);
 
   useEffect(() => {
     if (!activeRoute || started) return;
@@ -647,6 +679,8 @@ export default function Home() {
     setRemainingDuration(activeRoute.duration);
     lastSpokenStep.current = -1;
     warnedAlerts.current.clear();
+    navigationStartedAt.current = Date.now();
+    restReminderSpoken.current = false;
     void loadSafetyAlerts(origin);
     if (alertRefreshTimer.current !== null) window.clearInterval(alertRefreshTimer.current);
     alertRefreshTimer.current = window.setInterval(() => {
@@ -707,6 +741,18 @@ export default function Home() {
               message.lang = "es-ES";
               window.speechSynthesis.speak(message);
             }
+          }
+        }
+
+        const restAfterMinutes = travelMode === "Normal" ? 120 : 90;
+        if (!restReminderSpoken.current && Date.now() - navigationStartedAt.current >= restAfterMinutes * 60000) {
+          restReminderSpoken.current = true;
+          const reminder = "Es un buen momento para descansar. Busca una parada segura cercana.";
+          setStatus(reminder);
+          if (!muted && "speechSynthesis" in window) {
+            const message = new SpeechSynthesisUtterance(reminder);
+            message.lang = "es-ES";
+            window.speechSynthesis.speak(message);
           }
         }
 
@@ -771,6 +817,27 @@ export default function Home() {
   const navigationSteps = activeRoute?.legs.flatMap((leg) => leg.steps) ?? [];
   const currentInstruction = instructionFor(navigationSteps[currentStepIndex]);
   const tripCost = activeRoute ? (activeRoute.distance / 1000 / 100) * consumption * energyPrice : 0;
+  const restAfterMinutes = travelMode === "Normal" ? 120 : 90;
+  const restRecommended = Boolean(activeRoute && activeRoute.duration / 60 > restAfterMinutes);
+  const zbeDestination = ZBE_CITIES.find((city) => destination.toLocaleLowerCase("es").includes(city));
+  const zbeWarning = Boolean(zbeDestination && (environmentalBadge === "Sin etiqueta" || environmentalBadge === "B"));
+
+  async function shareTrip() {
+    if (!activeRoute || !destination) {
+      setStatus("Elige primero un destino para compartir el viaje");
+      return;
+    }
+    const text = `Voy hacia ${destination}. Llegada estimada ${arrivalTime(remainingDuration || activeRoute.duration)}. Distancia ${formatDistance(remainingDistance || activeRoute.distance)}. Compartido desde Vía Clara.`;
+    try {
+      if (navigator.share) await navigator.share({ title: "Mi viaje en Vía Clara", text, url: window.location.href });
+      else {
+        await navigator.clipboard.writeText(`${text} ${window.location.href}`);
+        setStatus("Resumen del viaje copiado para compartir");
+      }
+    } catch {
+      setStatus("No se ha compartido el viaje");
+    }
+  }
 
   async function installApp() {
     if (!installPrompt) {
@@ -802,6 +869,7 @@ export default function Home() {
             <span className="nav-speed">{speed}<small>km/h</small></span>
             <div className="nav-actions">
               <button className="report-nav" onClick={() => setShowReport(true)} aria-label="Comunicar incidencia">⚠</button>
+              <button onClick={() => void shareTrip()} aria-label="Compartir viaje">↗</button>
               <button onClick={() => { setMuted((value) => !value); window.speechSynthesis?.cancel(); }} aria-label={muted ? "Activar voz" : "Silenciar voz"}>{muted ? "🔇" : "🔊"}</button>
               <button onClick={() => setDarkMode((value) => !value)} aria-label="Cambiar modo de color">{darkMode ? "☀" : "☾"}</button>
               <button className="exit-nav" onClick={stopNavigation}>Salir</button>
@@ -936,6 +1004,18 @@ export default function Home() {
               <label>Consumo<input type="number" min="1" step="0.1" value={consumption} onChange={(event) => setConsumption(Number(event.target.value))} /><small>{vehicle === "Eléctrico" ? "kWh/100 km" : "L/100 km"}</small></label>
               <label>Precio<input type="number" min="0" step="0.01" value={energyPrice} onChange={(event) => setEnergyPrice(Number(event.target.value))} /><small>€/unidad</small></label>
             </div>
+            <div className="journey-profile">
+              <label>Modo de viaje
+                <select value={travelMode} onChange={(event) => setTravelMode(event.target.value as TravelMode)}>
+                  <option>Normal</option><option>Familia</option><option>Caravana</option>
+                </select>
+              </label>
+              <label>Etiqueta ambiental
+                <select value={environmentalBadge} onChange={(event) => setEnvironmentalBadge(event.target.value as typeof environmentalBadge)}>
+                  <option>Sin etiqueta</option><option>B</option><option>C</option><option>ECO</option><option>0</option>
+                </select>
+              </label>
+            </div>
             <div className="preference-switches">
               <label><input type="checkbox" checked={avoidTolls} onChange={(event) => setAvoidTolls(event.target.checked)} /> Evitar peajes</label>
               <label><input type="checkbox" checked={avoidHighways} onChange={(event) => setAvoidHighways(event.target.checked)} /> Evitar autopistas</label>
@@ -947,6 +1027,29 @@ export default function Home() {
                 {weather && <span><small>Tiempo en destino</small><strong>{Math.round(weather.temperature)} °C · viento {Math.round(weather.wind)} km/h</strong></span>}
               </div>
             )}
+          </section>
+        )}
+
+        {activeRoute && (
+          <section className="journey-assistant">
+            <div className={`journey-signal ${routeWeather?.level ?? "good"}`}>
+              <span>{routeWeather?.level === "danger" ? "⚠" : routeWeather?.level === "warning" ? "☂" : "☀"}</span>
+              <div><small>TIEMPO EN LA RUTA</small><strong>{routeWeather?.label ?? "Consultando condiciones…"}</strong></div>
+            </div>
+            {restRecommended && (
+              <div className="journey-signal rest">
+                <span>☕</span>
+                <div><small>COPILOTO DE DESCANSO</small><strong>Parada recomendada tras {restAfterMinutes} minutos</strong></div>
+                <button onClick={() => void findNearby("restaurant")}>Buscar</button>
+              </div>
+            )}
+            {zbeDestination && (
+              <div className={`journey-signal ${zbeWarning ? "danger" : "good"}`}>
+                <span>Ⓔ</span>
+                <div><small>ZONA DE BAJAS EMISIONES</small><strong>{zbeWarning ? `Revisa las restricciones de ${zbeDestination}` : `Etiqueta ${environmentalBadge}: comprueba las normas locales`}</strong></div>
+              </div>
+            )}
+            <button className="share-trip" onClick={() => void shareTrip()}>↗ Compartir estado del viaje</button>
           </section>
         )}
 
