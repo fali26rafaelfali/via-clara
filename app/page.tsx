@@ -516,12 +516,35 @@ export default function Home() {
         source: "Comunidad",
       })).filter((alert: RoadAlert) => distanceBetween(point, alert.coordinates) < 100000);
       const community = roadAlerts.filter((alert) => alert.id.startsWith("local-") && Date.now() - alert.createdAt < ALERT_DETAILS[alert.kind].expires);
-      setRoadAlerts([...community, ...shared, ...official, ...cameras]);
+      const combined = [...community, ...shared, ...official, ...cameras];
+      setRoadAlerts(combined);
       localStorage.setItem("via-clara-alerts", JSON.stringify(community));
       setStatus(`${official.length} DGT · ${cameras.length} radares · ${shared.length} avisos compartidos`);
+      return combined;
     } catch {
       setStatus("No se pudieron actualizar ahora las alertas");
+      return [];
     }
+  }
+
+  async function focusSafetyAlerts() {
+    const alerts = await loadSafetyAlerts(origin);
+    const map = mapRef.current;
+    if (!map || !alerts.length) {
+      setStatus("No hay alertas visibles cerca de tu ubicación");
+      return;
+    }
+    setSelectedAlert(null);
+    const bounds = alerts.reduce(
+      (box, alert) => box.extend(alert.coordinates),
+      new LngLatBounds(alerts[0].coordinates, alerts[0].coordinates),
+    );
+    map.fitBounds(bounds as LngLatBoundsLike, {
+      padding: { top: 90, right: 70, bottom: 90, left: 70 },
+      maxZoom: 13,
+      duration: 900,
+    });
+    setStatus(`Mostrando ${alerts.length} alertas en el mapa`);
   }
 
   async function reportAlert(kind: Exclude<AlertKind, "radar">) {
@@ -766,7 +789,7 @@ export default function Home() {
           </div>
         )}
         <div className="safety-legend">
-          <button onClick={() => void loadSafetyAlerts()}><span>◉</span> Alertas <b>{roadAlerts.length}</b></button>
+          <button onClick={() => void focusSafetyAlerts()} title="Mostrar todas las alertas en el mapa"><span>◉</span> Ver alertas <b>{roadAlerts.length}</b></button>
           <label><input type="checkbox" checked={alertsEnabled} onChange={(event) => setAlertsEnabled(event.target.checked)} /> Voz</label>
         </div>
         {showReport && (
