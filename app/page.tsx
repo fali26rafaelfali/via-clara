@@ -17,6 +17,15 @@ type RouteKind = "calm" | "fast" | "eco";
 type Place = { label: string; coordinates: Coordinates };
 type SavedPlace = Place & { kind: "Casa" | "Trabajo" | "Favorito" };
 type NearbyPlace = Place & { type: string };
+type AlertKind = "radar" | "accident" | "traffic" | "works" | "hazard" | "vehicle";
+type RoadAlert = {
+  id: string;
+  kind: AlertKind;
+  coordinates: Coordinates;
+  createdAt: number;
+  confirmations: number;
+  source: "OpenStreetMap" | "Comunidad";
+};
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -36,6 +45,14 @@ type RouteResult = {
 
 const MADRID: Coordinates = [-3.7038, 40.4168];
 const NAVIGATION_BLUE = "#1677ff";
+const ALERT_DETAILS: Record<AlertKind, { label: string; icon: string; color: string; expires: number }> = {
+  radar: { label: "Radar fijo", icon: "◉", color: "#be3c32", expires: 30 * 24 * 60 * 60 * 1000 },
+  accident: { label: "Accidente", icon: "⚠", color: "#d74836", expires: 90 * 60 * 1000 },
+  traffic: { label: "Retención", icon: "≋", color: "#e0822c", expires: 45 * 60 * 1000 },
+  works: { label: "Obras", icon: "◆", color: "#c78322", expires: 8 * 60 * 60 * 1000 },
+  hazard: { label: "Peligro", icon: "!", color: "#7859b8", expires: 2 * 60 * 60 * 1000 },
+  vehicle: { label: "Vehículo detenido", icon: "▰", color: "#3978a8", expires: 60 * 60 * 1000 },
+};
 const OSM_STYLE: StyleSpecification = {
   version: 8,
   sources: {
@@ -114,6 +131,8 @@ export default function Home() {
   const lastSpokenStep = useRef(-1);
   const lastRecalculation = useRef(0);
   const wakeLock = useRef<{ release: () => Promise<void> } | null>(null);
+  const alertMarkers = useRef<Marker[]>([]);
+  const warnedAlerts = useRef<Set<string>>(new Set());
   const [origin, setOrigin] = useState<Coordinates>(MADRID);
   const [destination, setDestination] = useState("");
   const [destinationPoint, setDestinationPoint] = useState<Coordinates | null>(null);
@@ -141,6 +160,9 @@ export default function Home() {
   const [avoidTolls, setAvoidTolls] = useState(false);
   const [avoidHighways, setAvoidHighways] = useState(false);
   const [weather, setWeather] = useState<{ temperature: number; wind: number } | null>(null);
+  const [roadAlerts, setRoadAlerts] = useState<RoadAlert[]>([]);
+  const [showReport, setShowReport] = useState(false);
+  const [alertsEnabled, setAlertsEnabled] = useState(true);
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current) return;
@@ -168,6 +190,8 @@ export default function Home() {
       setSavedPlaces(JSON.parse(localStorage.getItem("via-clara-saved") ?? "[]"));
       setRecentPlaces(JSON.parse(localStorage.getItem("via-clara-recent") ?? "[]"));
       const settings = JSON.parse(localStorage.getItem("via-clara-vehicle") ?? "{}");
+      const storedAlerts: RoadAlert[] = JSON.parse(localStorage.getItem("via-clara-alerts") ?? "[]");
+      setRoadAlerts(storedAlerts.filter((alert) => Date.now() - alert.createdAt < ALERT_DETAILS[alert.kind].expires));
       if (settings.vehicle) setVehicle(settings.vehicle);
       if (settings.consumption) setConsumption(settings.consumption);
       if (settings.energyPrice) setEnergyPrice(settings.energyPrice);
@@ -177,6 +201,28 @@ export default function Home() {
       // Keep safe defaults when local preferences are unavailable.
     }
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const render = () => {
+      alertMarkers.current.forEach((marker) => marker.remove());
+      alertMarkers.current = roadAlerts.map((alert) => {
+        const details = ALERT_DETAILS[alert.kind];
+        const element = document.createElement("button");
+        element.className = `road-alert-marker ${alert.kind}`;
+        element.textContent = details.icon;
+        element.title = `${details.label} · ${alert.source}`;
+        element.setAttribute("aria-label", element.title);
+        element.style.backgroundColor = details.color;
+        element.onclick = () => setStatus(`${details.label} · Fuente: ${alert.source} · ${alert.confirmations} confirmaciones`);
+        return new Marker({ element }).setLngLat(alert.coordinates).addTo(map);
+      });
+    };
+    if (map.isStyleLoaded()) render();
+    else map.once("load", render);
+    return () => alertMarkers.current.forEach((marker) => marker.remove());
+  }, [roadAlerts]);
 
   useEffect(() => {
     localStorage.setItem("via-clara-vehicle", JSON.stringify({ vehicle, consumption, energyPrice, avoidTolls, avoidHighways }));
@@ -407,6 +453,46 @@ export default function Home() {
     }
   }
 
+  async function loadSafetyAlerts(point: Coordinates = origin) {
+    setStatus("Actualizando alertas de seguridad…");
+    try {
+      const query = `[out:json][timeout:15];nwr(around:15000,${point[1]},${point[0]})[highway=speed_camera];out center;`;
+      const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+      if (!response.ok) throw new Error("alerts");
+      const data = await response.json();
+      const cameras: RoadAlert[] = (data.elements ?? []).map((item: { id: number; lat?: number; lon?: number; center?: { lat: number; lon: number } }) => ({
+        id: `osm-radar-${item.id}`,
+        kind: "radar",
+        coordinates: [item.lon ?? item.center?.lon, item.lat ?? item.center?.lat] as Coordinates,
+        createdAt: Date.now(),
+        confirmations: 0,
+        source: "OpenStreetMap",
+      })).filter((item: RoadAlert) => Number.isFinite(item.coordinates[0]));
+      const community = roadAlerts.filter((alert) => alert.source === "Comunidad" && Date.now() - alert.createdAt < ALERT_DETAILS[alert.kind].expires);
+      setRoadAlerts([...community, ...cameras]);
+      localStorage.setItem("via-clara-alerts", JSON.stringify(community));
+      setStatus(`${cameras.length} radares y ${community.length} avisos comunitarios cerca`);
+    } catch {
+      setStatus("No se pudieron actualizar ahora las alertas");
+    }
+  }
+
+  function reportAlert(kind: Exclude<AlertKind, "radar">) {
+    const alert: RoadAlert = {
+      id: `local-${Date.now()}`,
+      kind,
+      coordinates: origin,
+      createdAt: Date.now(),
+      confirmations: 1,
+      source: "Comunidad",
+    };
+    const community = [alert, ...roadAlerts.filter((item) => item.source === "Comunidad")];
+    setRoadAlerts([...community, ...roadAlerts.filter((item) => item.source === "OpenStreetMap")]);
+    localStorage.setItem("via-clara-alerts", JSON.stringify(community));
+    setShowReport(false);
+    setStatus(`${ALERT_DETAILS[kind].label} comunicado en tu posición`);
+  }
+
   function locateMe() {
     if (!navigator.geolocation) {
       setStatus("Este navegador no permite usar el GPS");
@@ -420,6 +506,7 @@ export default function Home() {
         originMarker.current?.setLngLat(point);
         mapRef.current?.flyTo({ center: point, zoom: 15 });
         setStatus("Ubicación GPS activada");
+        void loadSafetyAlerts(point);
         if (destinationPoint) void calculateRoutes(destinationPoint);
       },
       () => setStatus("Activa el permiso de ubicación para usar tu GPS"),
@@ -480,6 +567,23 @@ export default function Home() {
         const remainingSteps = steps.slice(nextIndex);
         setRemainingDistance(nextDistance + remainingSteps.reduce((total, step) => total + step.distance, 0));
         setRemainingDuration(remainingSteps.reduce((total, step) => total + step.duration, 0));
+
+        if (alertsEnabled) {
+          const approaching = roadAlerts
+            .map((alert) => ({ alert, distance: distanceBetween(point, alert.coordinates) }))
+            .filter(({ alert, distance }) => distance < (alert.kind === "radar" ? 700 : 450) && !warnedAlerts.current.has(alert.id))
+            .sort((a, b) => a.distance - b.distance)[0];
+          if (approaching) {
+            warnedAlerts.current.add(approaching.alert.id);
+            const warning = `${ALERT_DETAILS[approaching.alert.kind].label} a ${Math.max(50, Math.round(approaching.distance / 50) * 50)} metros`;
+            setStatus(warning);
+            if (!muted && "speechSynthesis" in window) {
+              const message = new SpeechSynthesisUtterance(warning);
+              message.lang = "es-ES";
+              window.speechSynthesis.speak(message);
+            }
+          }
+        }
 
         if (
           nextIndex !== lastSpokenStep.current &&
@@ -568,9 +672,31 @@ export default function Home() {
             </div>
             <span className="nav-speed">{speed}<small>km/h</small></span>
             <div className="nav-actions">
+              <button className="report-nav" onClick={() => setShowReport(true)} aria-label="Comunicar incidencia">⚠</button>
               <button onClick={() => { setMuted((value) => !value); window.speechSynthesis?.cancel(); }} aria-label={muted ? "Activar voz" : "Silenciar voz"}>{muted ? "🔇" : "🔊"}</button>
               <button onClick={() => setDarkMode((value) => !value)} aria-label="Cambiar modo de color">{darkMode ? "☀" : "☾"}</button>
               <button className="exit-nav" onClick={stopNavigation}>Salir</button>
+            </div>
+          </div>
+        )}
+        <div className="safety-legend">
+          <button onClick={() => void loadSafetyAlerts()}><span>◉</span> Alertas <b>{roadAlerts.length}</b></button>
+          <label><input type="checkbox" checked={alertsEnabled} onChange={(event) => setAlertsEnabled(event.target.checked)} /> Voz</label>
+        </div>
+        {showReport && (
+          <div className="report-sheet" role="dialog" aria-modal="true" aria-label="Comunicar incidencia">
+            <div className="report-card">
+              <div className="report-heading"><div><small>AVISO COMUNITARIO</small><strong>¿Qué está pasando?</strong></div><button onClick={() => setShowReport(false)}>×</button></div>
+              <p>Se marcará en tu posición actual y caducará automáticamente.</p>
+              <div className="report-grid">
+                {(["accident", "traffic", "works", "hazard", "vehicle"] as const).map((kind) => (
+                  <button key={kind} onClick={() => reportAlert(kind)}>
+                    <span style={{ background: ALERT_DETAILS[kind].color }}>{ALERT_DETAILS[kind].icon}</span>
+                    {ALERT_DETAILS[kind].label}
+                  </button>
+                ))}
+              </div>
+              <small className="safety-note">Por seguridad, comunica el aviso con el vehículo detenido o mediante un acompañante.</small>
             </div>
           </div>
         )}
@@ -669,6 +795,15 @@ export default function Home() {
             )}
           </section>
         )}
+
+        <section className="safety-card">
+          <div><span className="safety-icon">◉</span><div><strong>Seguridad en ruta</strong><small>Radares y avisos cercanos</small></div></div>
+          <div className="safety-card-actions">
+            <button onClick={() => void loadSafetyAlerts()}>Actualizar</button>
+            <button className="report-button" onClick={() => setShowReport(true)}>＋ Comunicar</button>
+          </div>
+          <p><b>{roadAlerts.length}</b> alertas visibles · Radares de OpenStreetMap y avisos guardados en este dispositivo.</p>
+        </section>
 
         <div className="route-title">
           <strong>¿Qué ruta prefieres?</strong>
