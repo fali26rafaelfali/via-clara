@@ -15,6 +15,10 @@ import {
 type Coordinates = [number, number];
 type RouteKind = "calm" | "fast" | "eco";
 type Place = { label: string; coordinates: Coordinates };
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
 type RouteStep = {
   distance: number;
   duration: number;
@@ -61,6 +65,12 @@ function formatNavigationDistance(metres: number) {
   return metres < 1000 ? `${Math.max(10, Math.round(metres / 10) * 10)} m` : formatDistance(metres);
 }
 
+function arrivalTime(seconds: number) {
+  return new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" }).format(
+    new Date(Date.now() + seconds * 1000),
+  );
+}
+
 function distanceBetween(a: Coordinates, b: Coordinates) {
   const toRadians = (value: number) => (value * Math.PI) / 180;
   const dLat = toRadians(b[1] - a[1]);
@@ -101,6 +111,7 @@ export default function Home() {
   const watchId = useRef<number | null>(null);
   const lastSpokenStep = useRef(-1);
   const lastRecalculation = useRef(0);
+  const wakeLock = useRef<{ release: () => Promise<void> } | null>(null);
   const [origin, setOrigin] = useState<Coordinates>(MADRID);
   const [destination, setDestination] = useState("");
   const [destinationPoint, setDestinationPoint] = useState<Coordinates | null>(null);
@@ -113,6 +124,11 @@ export default function Home() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [distanceToTurn, setDistanceToTurn] = useState(0);
   const [speed, setSpeed] = useState(0);
+  const [remainingDistance, setRemainingDistance] = useState(0);
+  const [remainingDuration, setRemainingDuration] = useState(0);
+  const [muted, setMuted] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current) return;
@@ -134,6 +150,41 @@ export default function Home() {
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const updateTheme = () => setDarkMode(media.matches);
+    updateTheme();
+    media.addEventListener("change", updateTheme);
+
+    const captureInstall = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", captureInstall);
+
+    if ("serviceWorker" in navigator) {
+      const serviceWorkerPath = window.location.pathname.startsWith("/via-clara")
+        ? "/via-clara/sw.js"
+        : "/sw.js";
+      void navigator.serviceWorker.register(serviceWorkerPath);
+    }
+    return () => {
+      media.removeEventListener("change", updateTheme);
+      window.removeEventListener("beforeinstallprompt", captureInstall);
+    };
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle("dark-mode", darkMode);
+    const map = mapRef.current;
+    if (map?.getLayer("openstreetmap")) {
+      map.setPaintProperty("openstreetmap", "raster-brightness-max", darkMode ? 0.52 : 1);
+      map.setPaintProperty("openstreetmap", "raster-saturation", darkMode ? -0.55 : 0);
+      map.setPaintProperty("openstreetmap", "raster-contrast", darkMode ? 0.28 : 0);
+    }
+    return () => document.body.classList.remove("dark-mode");
+  }, [darkMode]);
 
   useEffect(() => {
     if (started) {
@@ -187,6 +238,12 @@ export default function Home() {
     if (selected === "eco") return [...routes].sort((a, b) => a.distance - b.distance)[0];
     return [...routes].sort((a, b) => b.duration - a.duration)[0];
   })();
+
+  useEffect(() => {
+    if (!activeRoute || started) return;
+    setRemainingDistance(activeRoute.distance);
+    setRemainingDuration(activeRoute.duration);
+  }, [activeRoute, started]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -302,10 +359,17 @@ export default function Home() {
     }
     setStarted(true);
     setCurrentStepIndex(0);
+    setRemainingDistance(activeRoute.distance);
+    setRemainingDuration(activeRoute.duration);
     lastSpokenStep.current = -1;
     setStatus("Navegación activa dentro de Vía Clara");
     const steps = activeRoute.legs.flatMap((leg) => leg.steps);
     const routeCoordinates = activeRoute.geometry.coordinates as Coordinates[];
+    if ("wakeLock" in navigator) {
+      void navigator.wakeLock.request("screen").then((lock) => {
+        wakeLock.current = lock;
+      }).catch(() => setStatus("Navegación activa · evita apagar la pantalla"));
+    }
     watchId.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
         const point: Coordinates = [coords.longitude, coords.latitude];
@@ -334,11 +398,15 @@ export default function Home() {
         const nextDistance = nextStep ? distanceBetween(point, nextStep.maneuver.location) : 0;
         setCurrentStepIndex(nextIndex);
         setDistanceToTurn(nextDistance);
+        const remainingSteps = steps.slice(nextIndex);
+        setRemainingDistance(nextDistance + remainingSteps.reduce((total, step) => total + step.distance, 0));
+        setRemainingDuration(remainingSteps.reduce((total, step) => total + step.duration, 0));
 
         if (
           nextIndex !== lastSpokenStep.current &&
           nextStep &&
           nextDistance < 450 &&
+          !muted &&
           "speechSynthesis" in window &&
           "SpeechSynthesisUtterance" in window
         ) {
@@ -380,6 +448,8 @@ export default function Home() {
       watchId.current = null;
     }
     window.speechSynthesis?.cancel();
+    void wakeLock.current?.release();
+    wakeLock.current = null;
     setStarted(false);
     setSpeed(0);
     mapRef.current?.easeTo({ pitch: 0, bearing: 0, duration: 500 });
@@ -388,6 +458,16 @@ export default function Home() {
 
   const navigationSteps = activeRoute?.legs.flatMap((leg) => leg.steps) ?? [];
   const currentInstruction = instructionFor(navigationSteps[currentStepIndex]);
+
+  async function installApp() {
+    if (!installPrompt) {
+      setStatus("En Chrome, abre el menú y pulsa «Instalar aplicación»");
+      return;
+    }
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  }
 
   return (
     <main className={`app-shell ${started ? "navigating" : ""}`}>
@@ -401,12 +481,17 @@ export default function Home() {
         {started && activeRoute && (
           <div className="navigation-banner">
             <span className="turn-arrow">↱</span>
-            <div>
+            <div className="nav-instruction">
               <small>{distanceToTurn > 0 ? `En ${formatNavigationDistance(distanceToTurn)}` : "Navegación activa"}</small>
               <strong>{currentInstruction}</strong>
+              <span className="nav-meta">{formatNavigationDistance(remainingDistance)} · llegada {arrivalTime(remainingDuration)}</span>
             </div>
             <span className="nav-speed">{speed}<small>km/h</small></span>
-            <button onClick={stopNavigation}>Salir</button>
+            <div className="nav-actions">
+              <button onClick={() => { setMuted((value) => !value); window.speechSynthesis?.cancel(); }} aria-label={muted ? "Activar voz" : "Silenciar voz"}>{muted ? "🔇" : "🔊"}</button>
+              <button onClick={() => setDarkMode((value) => !value)} aria-label="Cambiar modo de color">{darkMode ? "☀" : "☾"}</button>
+              <button className="exit-nav" onClick={stopNavigation}>Salir</button>
+            </div>
           </div>
         )}
       </section>
@@ -416,6 +501,7 @@ export default function Home() {
           <span className="eyebrow">MAPA Y RUTAS REALES</span>
           <h1>Llega bien,<br />no solo rápido.</h1>
           <p>Busca un destino y permite tu ubicación para calcular el viaje desde donde estás.</p>
+          <button className="install-button" onClick={installApp}><span>＋</span> Instalar Vía Clara</button>
         </div>
 
         <div className="search-box">
@@ -476,7 +562,7 @@ export default function Home() {
 
         <div className="summary">
           <span><small>Ruta elegida</small><strong>{routeLabels[selected].label}</strong></span>
-          <span><small>Distancia</small><strong>{activeRoute ? formatDistance(activeRoute.distance) : "—"}</strong></span>
+          <span><small>Llegada estimada</small><strong>{activeRoute ? arrivalTime(activeRoute.duration) : "—"}</strong></span>
         </div>
         <button className={`start-button ${started ? "stop" : ""}`} disabled={!activeRoute} onClick={started ? stopNavigation : startNavigation}>
           {started ? "Detener navegación" : activeRoute ? "Iniciar en Vía Clara" : "Primero elige un destino"} <span>{started ? "■" : "→"}</span>

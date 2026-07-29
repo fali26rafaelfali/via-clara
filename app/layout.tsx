@@ -5,6 +5,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 export const metadata: Metadata = {
   title: "Vía Clara · Navegación a tu manera",
   description: "Mapa, GPS y rutas reales tranquilas, rápidas o ecológicas.",
+  manifest: "/manifest.webmanifest",
+  icons: { icon: "/app-icon.png", apple: "/app-icon.png" },
   openGraph: {
     title: "Vía Clara",
     description: "Llega bien, no solo rápido.",

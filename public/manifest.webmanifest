@@ -1,0 +1,19 @@
+{
+  "name": "Vía Clara",
+  "short_name": "Vía Clara",
+  "description": "Navegación tranquila con OpenStreetMap, GPS y rutas reales.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#faf8f2",
+  "theme_color": "#176b4a",
+  "icons": [
+    {
+      "src": "app-icon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
