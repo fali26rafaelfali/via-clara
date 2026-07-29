@@ -154,6 +154,9 @@ export default function Home() {
   const wakeLock = useRef<{ release: () => Promise<void> } | null>(null);
   const alertMarkers = useRef<Marker[]>([]);
   const warnedAlerts = useRef<Set<string>>(new Set());
+  const roadAlertsRef = useRef<RoadAlert[]>([]);
+  const latestOrigin = useRef<Coordinates>(MADRID);
+  const alertRefreshTimer = useRef<number | null>(null);
   const [origin, setOrigin] = useState<Coordinates>(MADRID);
   const [destination, setDestination] = useState("");
   const [destinationPoint, setDestinationPoint] = useState<Coordinates | null>(null);
@@ -201,11 +204,16 @@ export default function Home() {
     originMarker.current = new Marker({ color: "#176b4a" }).setLngLat(MADRID).addTo(map);
     return () => {
       if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+      if (alertRefreshTimer.current !== null) window.clearInterval(alertRefreshTimer.current);
       window.speechSynthesis?.cancel();
       map.remove();
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    roadAlertsRef.current = roadAlerts;
+  }, [roadAlerts]);
 
   useEffect(() => {
     try {
@@ -611,6 +619,7 @@ export default function Home() {
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         const point: Coordinates = [coords.longitude, coords.latitude];
+        latestOrigin.current = point;
         setOrigin(point);
         originMarker.current?.setLngLat(point);
         mapRef.current?.flyTo({ center: point, zoom: 15 });
@@ -637,7 +646,13 @@ export default function Home() {
     setRemainingDistance(activeRoute.distance);
     setRemainingDuration(activeRoute.duration);
     lastSpokenStep.current = -1;
-    setStatus("Navegación activa dentro de Vía Clara");
+    warnedAlerts.current.clear();
+    void loadSafetyAlerts(origin);
+    if (alertRefreshTimer.current !== null) window.clearInterval(alertRefreshTimer.current);
+    alertRefreshTimer.current = window.setInterval(() => {
+      void loadSafetyAlerts(latestOrigin.current);
+    }, 120000);
+    setStatus("Navegación activa · cargando alertas de seguridad");
     const steps = activeRoute.legs.flatMap((leg) => leg.steps);
     const routeCoordinates = activeRoute.geometry.coordinates as Coordinates[];
     if ("wakeLock" in navigator) {
@@ -648,6 +663,7 @@ export default function Home() {
     watchId.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
         const point: Coordinates = [coords.longitude, coords.latitude];
+        latestOrigin.current = point;
         setOrigin(point);
         setSpeed(Math.max(0, Math.round((coords.speed ?? 0) * 3.6)));
         originMarker.current?.setLngLat(point);
@@ -678,7 +694,7 @@ export default function Home() {
         setRemainingDuration(remainingSteps.reduce((total, step) => total + step.duration, 0));
 
         if (alertsEnabled) {
-          const approaching = roadAlerts
+          const approaching = roadAlertsRef.current
             .map((alert) => ({ alert, distance: distanceBetween(point, alert.coordinates) }))
             .filter(({ alert, distance }) => distance < (alert.kind === "radar" ? 700 : 450) && !warnedAlerts.current.has(alert.id))
             .sort((a, b) => a.distance - b.distance)[0];
@@ -739,6 +755,10 @@ export default function Home() {
       navigator.geolocation.clearWatch(watchId.current);
       watchId.current = null;
     }
+    if (alertRefreshTimer.current !== null) {
+      window.clearInterval(alertRefreshTimer.current);
+      alertRefreshTimer.current = null;
+    }
     window.speechSynthesis?.cancel();
     void wakeLock.current?.release();
     wakeLock.current = null;
@@ -777,7 +797,7 @@ export default function Home() {
             <div className="nav-instruction">
               <small>{distanceToTurn > 0 ? `En ${formatNavigationDistance(distanceToTurn)}` : "Navegación activa"}</small>
               <strong>{currentInstruction}</strong>
-              <span className="nav-meta">{formatNavigationDistance(remainingDistance)} · llegada {arrivalTime(remainingDuration)}</span>
+              <span className="nav-meta">{formatNavigationDistance(remainingDistance)} · llegada {arrivalTime(remainingDuration)} · {roadAlerts.length} alertas</span>
             </div>
             <span className="nav-speed">{speed}<small>km/h</small></span>
             <div className="nav-actions">
