@@ -6,7 +6,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   update:
@@ -16,12 +22,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+      - run: npm ci
       - name: Descargar y transformar DATEX II
         run: node scripts/update-dgt.mjs
-      - name: Publicar cambios
-        run: |
-          git config user.name "via-clara-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add public/dgt-incidents.json
-          git diff --cached --quiet || git commit -m "Update DGT traffic incidents"
-          git push
+      - run: npm run build:pages
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: github-dist
+      - uses: actions/deploy-pages@v4
