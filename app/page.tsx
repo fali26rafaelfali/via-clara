@@ -29,6 +29,7 @@ type RouteResult = {
 };
 
 const MADRID: Coordinates = [-3.7038, 40.4168];
+const NAVIGATION_BLUE = "#1677ff";
 const OSM_STYLE: StyleSpecification = {
   version: 8,
   sources: {
@@ -199,15 +200,31 @@ export default function Home() {
       };
       if (source) {
         source.setData(data);
-        map.setPaintProperty("route", "line-color", routeLabels[selected].color);
+        map.setPaintProperty("route", "line-color", NAVIGATION_BLUE);
+        if (!map.getLayer("route-casing")) {
+          map.addLayer({
+            id: "route-casing",
+            type: "line",
+            source: "route",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": "#ffffff", "line-width": 13, "line-opacity": 0.9 },
+          }, "route");
+        }
       } else {
         map.addSource("route", { type: "geojson", data });
+        map.addLayer({
+          id: "route-casing",
+          type: "line",
+          source: "route",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": "#ffffff", "line-width": 13, "line-opacity": 0.9 },
+        });
         map.addLayer({
           id: "route",
           type: "line",
           source: "route",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": routeLabels[selected].color, "line-width": 7, "line-opacity": 0.92 },
+          paint: { "line-color": NAVIGATION_BLUE, "line-width": 8, "line-opacity": 0.96 },
         });
       }
       const coords = activeRoute.geometry.coordinates as Coordinates[];
