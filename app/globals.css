@@ -57,6 +57,8 @@ button { cursor: pointer; }
 .navigation-banner small, .navigation-banner strong { display: block; }
 .navigation-banner small { color: #c3dbd0; margin-bottom: 2px; }
 .navigation-banner button { margin-left: auto; padding: 8px 10px; border: 0; border-radius: 9px; color: #173f30; background: white; font-weight: 700; }
+.nav-speed { min-width: 44px; padding-left: 12px; border-left: 1px solid #ffffff38; text-align: center; font-size: 18px; font-weight: 800; }
+.nav-speed small { display: block; color: #c3dbd0; font-size: 8px; font-weight: 500; }
 
 .panel { position: relative; z-index: 3; display: flex; flex-direction: column; padding: 56px clamp(30px, 4vw, 64px) 24px; background: var(--paper); box-shadow: -12px 0 35px #1f312313; }
 .eyebrow { color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: .18em; }
@@ -101,6 +103,7 @@ h1 { margin: 11px 0 13px; font: 500 clamp(40px, 4.2vw, 62px)/.98 Georgia, serif;
 .start-button { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 17px 20px; border: 0; border-radius: 14px; color: white; background: var(--green); font-weight: 750; box-shadow: 0 10px 25px #176b4a38; transition: .2s ease; }
 .start-button:hover { background: #10583c; transform: translateY(-1px); }
 .start-button:disabled { cursor: not-allowed; color: #8a938e; background: #d8ddd9; box-shadow: none; transform: none; }
+.start-button.stop { background: #a84b38; box-shadow: 0 10px 25px #a84b3833; }
 .start-button span { font-size: 20px; }
 .demo-note { margin: 12px 0 0; color: #929992; text-align: center; font-size: 9px; }
 

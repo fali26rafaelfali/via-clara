@@ -14,7 +14,18 @@ import {
 type Coordinates = [number, number];
 type RouteKind = "calm" | "fast" | "eco";
 type Place = { label: string; coordinates: Coordinates };
-type RouteResult = { geometry: GeoJSON.LineString; duration: number; distance: number };
+type RouteStep = {
+  distance: number;
+  duration: number;
+  name: string;
+  maneuver: { location: Coordinates; type: string; modifier?: string };
+};
+type RouteResult = {
+  geometry: GeoJSON.LineString;
+  duration: number;
+  distance: number;
+  legs: Array<{ steps: RouteStep[] }>;
+};
 
 const MADRID: Coordinates = [-3.7038, 40.4168];
 const routeLabels: Record<RouteKind, { label: string; note: string; color: string }> = {
@@ -31,11 +42,50 @@ function formatDistance(metres: number) {
   return `${(metres / 1000).toLocaleString("es-ES", { maximumFractionDigits: 1 })} km`;
 }
 
+function formatNavigationDistance(metres: number) {
+  return metres < 1000 ? `${Math.max(10, Math.round(metres / 10) * 10)} m` : formatDistance(metres);
+}
+
+function distanceBetween(a: Coordinates, b: Coordinates) {
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const dLat = toRadians(b[1] - a[1]);
+  const dLon = toRadians(b[0] - a[0]);
+  const lat1 = toRadians(a[1]);
+  const lat2 = toRadians(b[1]);
+  const value =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+}
+
+function instructionFor(step?: RouteStep) {
+  if (!step) return "Continúa hasta tu destino";
+  const road = step.name ? ` por ${step.name}` : "";
+  const modifier: Record<string, string> = {
+    left: "a la izquierda",
+    right: "a la derecha",
+    "slight left": "ligeramente a la izquierda",
+    "slight right": "ligeramente a la derecha",
+    straight: "recto",
+    uturn: "en sentido contrario",
+  };
+  if (step.maneuver.type === "arrive") return "Has llegado a tu destino";
+  if (step.maneuver.type === "depart") return `Sal${road}`;
+  if (step.maneuver.type === "roundabout" || step.maneuver.type === "rotary") return `Entra en la rotonda${road}`;
+  if (step.maneuver.type === "merge") return `Incorpórate${road}`;
+  if (step.maneuver.type === "on ramp") return `Toma el acceso${road}`;
+  if (step.maneuver.type === "off ramp") return `Toma la salida${road}`;
+  return `Gira ${modifier[step.maneuver.modifier ?? "straight"] ?? "recto"}${road}`;
+}
+
 export default function Home() {
   const mapNode = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const originMarker = useRef<Marker | null>(null);
   const destinationMarker = useRef<Marker | null>(null);
+  const watchId = useRef<number | null>(null);
+  const lastSpokenStep = useRef(-1);
+  const lastRecalculation = useRef(0);
   const [origin, setOrigin] = useState<Coordinates>(MADRID);
   const [destination, setDestination] = useState("");
   const [destinationPoint, setDestinationPoint] = useState<Coordinates | null>(null);
@@ -45,6 +95,9 @@ export default function Home() {
   const [status, setStatus] = useState("Pulsa el botón de ubicación para usar tu GPS");
   const [loading, setLoading] = useState(false);
   const [started, setStarted] = useState(false);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [distanceToTurn, setDistanceToTurn] = useState(0);
+  const [speed, setSpeed] = useState(0);
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current) return;
@@ -60,6 +113,8 @@ export default function Home() {
     mapRef.current = map;
     originMarker.current = new Marker({ color: "#176b4a" }).setLngLat(MADRID).addTo(map);
     return () => {
+      if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+      window.speechSynthesis?.cancel();
       map.remove();
       mapRef.current = null;
     };
@@ -138,12 +193,12 @@ export default function Home() {
     else map.once("load", updateRoute);
   }, [activeRoute, selected]);
 
-  async function calculateRoutes(point: Coordinates) {
+  async function calculateRoutes(point: Coordinates, from: Coordinates = origin) {
     setLoading(true);
     setStatus("Calculando rutas reales…");
     try {
       const response = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${origin[0]},${origin[1]};${point[0]},${point[1]}?alternatives=3&overview=full&geometries=geojson&steps=true`,
+        `https://router.project-osrm.org/route/v1/driving/${from[0]},${from[1]};${point[0]},${point[1]}?alternatives=3&overview=full&geometries=geojson&steps=true`,
       );
       if (!response.ok) throw new Error("route");
       const data = await response.json();
@@ -192,14 +247,102 @@ export default function Home() {
   }
 
   function startNavigation() {
-    if (!destinationPoint) {
+    if (!destinationPoint || !activeRoute) {
       setStatus("Primero selecciona una dirección de la lista");
       return;
     }
+    if (!navigator.geolocation) {
+      setStatus("Este navegador no permite navegación GPS");
+      return;
+    }
     setStarted(true);
-    const [longitude, latitude] = destinationPoint;
-    window.location.href = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=driving`;
+    setCurrentStepIndex(0);
+    lastSpokenStep.current = -1;
+    setStatus("Navegación activa dentro de Vía Clara");
+    const steps = activeRoute.legs.flatMap((leg) => leg.steps);
+    const routeCoordinates = activeRoute.geometry.coordinates as Coordinates[];
+    watchId.current = navigator.geolocation.watchPosition(
+      ({ coords }) => {
+        const point: Coordinates = [coords.longitude, coords.latitude];
+        setOrigin(point);
+        setSpeed(Math.max(0, Math.round((coords.speed ?? 0) * 3.6)));
+        originMarker.current?.setLngLat(point);
+        mapRef.current?.easeTo({
+          center: point,
+          zoom: 17,
+          bearing: coords.heading ?? mapRef.current.getBearing(),
+          pitch: 42,
+          duration: 600,
+        });
+
+        let closestIndex = 0;
+        let closestDistance = Number.POSITIVE_INFINITY;
+        steps.forEach((step, index) => {
+          const distance = distanceBetween(point, step.maneuver.location);
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestIndex = index;
+          }
+        });
+        const nextIndex = closestDistance < 35 ? Math.min(closestIndex + 1, steps.length - 1) : closestIndex;
+        const nextStep = steps[nextIndex];
+        const nextDistance = nextStep ? distanceBetween(point, nextStep.maneuver.location) : 0;
+        setCurrentStepIndex(nextIndex);
+        setDistanceToTurn(nextDistance);
+
+        if (
+          nextIndex !== lastSpokenStep.current &&
+          nextStep &&
+          nextDistance < 450 &&
+          "speechSynthesis" in window &&
+          "SpeechSynthesisUtterance" in window
+        ) {
+          lastSpokenStep.current = nextIndex;
+          window.speechSynthesis?.cancel();
+          const message = new SpeechSynthesisUtterance(
+            `En ${Math.max(10, Math.round(nextDistance / 10) * 10)} metros, ${instructionFor(nextStep)}`,
+          );
+          message.lang = "es-ES";
+          message.rate = 0.95;
+          window.speechSynthesis?.speak(message);
+        }
+
+        const distanceFromRoute = routeCoordinates.reduce(
+          (minimum, coordinate) => Math.min(minimum, distanceBetween(point, coordinate)),
+          Number.POSITIVE_INFINITY,
+        );
+        if (
+          distanceFromRoute > 120 &&
+          destinationPoint &&
+          Date.now() - lastRecalculation.current > 20000
+        ) {
+          lastRecalculation.current = Date.now();
+          setStatus("Te has desviado. Recalculando ruta…");
+          void calculateRoutes(destinationPoint, point);
+        }
+      },
+      () => {
+        setStatus("No recibimos tu posición. Revisa el permiso GPS.");
+        stopNavigation();
+      },
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 },
+    );
   }
+
+  function stopNavigation() {
+    if (watchId.current !== null) {
+      navigator.geolocation.clearWatch(watchId.current);
+      watchId.current = null;
+    }
+    window.speechSynthesis?.cancel();
+    setStarted(false);
+    setSpeed(0);
+    mapRef.current?.easeTo({ pitch: 0, bearing: 0, duration: 500 });
+    setStatus("Navegación detenida");
+  }
+
+  const navigationSteps = activeRoute?.legs.flatMap((leg) => leg.steps) ?? [];
+  const currentInstruction = instructionFor(navigationSteps[currentStepIndex]);
 
   return (
     <main className="app-shell">
@@ -213,8 +356,12 @@ export default function Home() {
         {started && activeRoute && (
           <div className="navigation-banner">
             <span className="turn-arrow">↱</span>
-            <div><small>Navegación iniciada</small><strong>Sigue la ruta marcada</strong></div>
-            <button onClick={() => setStarted(false)}>Salir</button>
+            <div>
+              <small>{distanceToTurn > 0 ? `En ${formatNavigationDistance(distanceToTurn)}` : "Navegación activa"}</small>
+              <strong>{currentInstruction}</strong>
+            </div>
+            <span className="nav-speed">{speed}<small>km/h</small></span>
+            <button onClick={stopNavigation}>Salir</button>
           </div>
         )}
       </section>
@@ -286,10 +433,10 @@ export default function Home() {
           <span><small>Ruta elegida</small><strong>{routeLabels[selected].label}</strong></span>
           <span><small>Distancia</small><strong>{activeRoute ? formatDistance(activeRoute.distance) : "—"}</strong></span>
         </div>
-        <button className="start-button" disabled={!activeRoute} onClick={startNavigation}>
-          {activeRoute ? "Abrir navegación GPS" : "Primero elige un destino"} <span>→</span>
+        <button className={`start-button ${started ? "stop" : ""}`} disabled={!activeRoute} onClick={started ? stopNavigation : startNavigation}>
+          {started ? "Detener navegación" : activeRoute ? "Iniciar en Vía Clara" : "Primero elige un destino"} <span>{started ? "■" : "→"}</span>
         </button>
-        <p className="demo-note">El botón abre la navegación paso a paso en Google Maps</p>
+        <p className="demo-note">Navegación propia con OpenStreetMap · Mantén la pantalla activa</p>
       </aside>
     </main>
   );
