@@ -14,6 +14,7 @@ body {
   background: var(--paper);
   font-family: "Aptos", "Segoe UI", sans-serif;
 }
+body.navigation-active { overflow: hidden; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 
@@ -107,6 +108,19 @@ h1 { margin: 11px 0 13px; font: 500 clamp(40px, 4.2vw, 62px)/.98 Georgia, serif;
 .start-button span { font-size: 20px; }
 .demo-note { margin: 12px 0 0; color: #929992; text-align: center; font-size: 9px; }
 
+.app-shell.navigating .map-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  width: 100vw;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.app-shell.navigating .panel { display: none; }
+.app-shell.navigating .brand { display: none; }
+.app-shell.navigating .locate { bottom: 30px; right: 18px; }
+.app-shell.navigating .navigation-banner { position: fixed; }
+
 @media (max-width: 820px) {
   .app-shell { display: flex; flex-direction: column; }
   .map-wrap { min-height: 46vh; order: 2; }
@@ -115,7 +129,11 @@ h1 { margin: 11px 0 13px; font: 500 clamp(40px, 4.2vw, 62px)/.98 Georgia, serif;
   .panel-heading p { margin-bottom: 18px; }
   .route-title { margin-top: 18px; }
   .brand { top: 18px; left: 18px; }
-  .navigation-banner { top: 18px; min-width: min(330px, calc(100% - 36px)); }
+  .navigation-banner { top: 18px; width: calc(100% - 24px); min-width: 0; gap: 9px; padding: 12px; }
+  .navigation-banner .turn-arrow { font-size: 25px; }
+  .navigation-banner > div { min-width: 0; flex: 1; }
+  .navigation-banner strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .navigation-banner button { margin-left: 0; }
 }
 
 @media (max-width: 480px) {

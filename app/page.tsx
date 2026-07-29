@@ -121,6 +121,20 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (started) {
+      document.body.classList.add("navigation-active");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      document.body.classList.remove("navigation-active");
+    }
+    const timer = window.setTimeout(() => mapRef.current?.resize(), 120);
+    return () => {
+      window.clearTimeout(timer);
+      document.body.classList.remove("navigation-active");
+    };
+  }, [started]);
+
+  useEffect(() => {
     if (destination.trim().length < 3 || destinationPoint) {
       setSuggestions([]);
       return;
@@ -345,7 +359,7 @@ export default function Home() {
   const currentInstruction = instructionFor(navigationSteps[currentStepIndex]);
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${started ? "navigating" : ""}`}>
       <section className="map-wrap" aria-label="Mapa real de navegación">
         <div ref={mapNode} className="map-canvas" />
         <header className="brand">
