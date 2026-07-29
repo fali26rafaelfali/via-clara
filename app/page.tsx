@@ -191,6 +191,16 @@ export default function Home() {
     );
   }
 
+  function startNavigation() {
+    if (!destinationPoint) {
+      setStatus("Primero selecciona una dirección de la lista");
+      return;
+    }
+    setStarted(true);
+    const [longitude, latitude] = destinationPoint;
+    window.location.href = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=driving`;
+  }
+
   return (
     <main className="app-shell">
       <section className="map-wrap" aria-label="Mapa real de navegación">
@@ -276,10 +286,10 @@ export default function Home() {
           <span><small>Ruta elegida</small><strong>{routeLabels[selected].label}</strong></span>
           <span><small>Distancia</small><strong>{activeRoute ? formatDistance(activeRoute.distance) : "—"}</strong></span>
         </div>
-        <button className="start-button" disabled={!activeRoute} onClick={() => setStarted(true)}>
-          {activeRoute ? "Iniciar navegación" : "Primero elige un destino"} <span>→</span>
+        <button className="start-button" disabled={!activeRoute} onClick={startNavigation}>
+          {activeRoute ? "Abrir navegación GPS" : "Primero elige un destino"} <span>→</span>
         </button>
-        <p className="demo-note">Mapa OpenStreetMap · Rutas estimadas para conducción</p>
+        <p className="demo-note">El botón abre la navegación paso a paso en Google Maps</p>
       </aside>
     </main>
   );
