@@ -47,6 +47,8 @@ type RouteResult = {
 
 const MADRID: Coordinates = [-3.7038, 40.4168];
 const NAVIGATION_BLUE = "#1677ff";
+const SUPABASE_URL = "https://vbzhxoanlqpqwxfidgao.supabase.co";
+const SUPABASE_KEY = "sb_publishable_dXBO8BiyoQkEVlqldNDesQ_HPoeQ0yn";
 const ALERT_DETAILS: Record<AlertKind, { label: string; icon: string; color: string; expires: number }> = {
   radar: { label: "Radar fijo", icon: "◉", color: "#be3c32", expires: 30 * 24 * 60 * 60 * 1000 },
   accident: { label: "Accidente", icon: "⚠", color: "#d74836", expires: 90 * 60 * 1000 },
@@ -102,6 +104,15 @@ function distanceBetween(a: Coordinates, b: Coordinates) {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return 6371000 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+}
+
+function deviceId() {
+  let id = localStorage.getItem("via-clara-device-id");
+  if (!id) {
+    id = `device-${crypto.randomUUID()}`;
+    localStorage.setItem("via-clara-device-id", id);
+  }
+  return id;
 }
 
 function instructionFor(step?: RouteStep) {
@@ -459,9 +470,16 @@ export default function Home() {
     setStatus("Actualizando alertas de seguridad…");
     try {
       const query = `[out:json][timeout:15];nwr(around:15000,${point[1]},${point[0]})[highway=speed_camera];out center;`;
-      const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+      const [response, sharedResponse] = await Promise.all([
+        fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`),
+        fetch(`${SUPABASE_URL}/rest/v1/road_reports?select=id,kind,latitude,longitude,created_at,confirmations&limit=1000`, {
+          headers: { apikey: SUPABASE_KEY },
+          cache: "no-store",
+        }),
+      ]);
       if (!response.ok) throw new Error("alerts");
       const data = await response.json();
+      const sharedData = sharedResponse.ok ? await sharedResponse.json() : [];
       const base = window.location.pathname.startsWith("/via-clara") ? "/via-clara" : "";
       const dgtData = await fetch(`${base}/dgt-incidents.json`, { cache: "no-store" })
         .then((result) => result.ok ? result.json() : { incidents: [] })
@@ -477,16 +495,24 @@ export default function Home() {
       const official: RoadAlert[] = (dgtData.incidents ?? [])
         .filter((alert: RoadAlert) => distanceBetween(point, alert.coordinates) < 100000)
         .slice(0, 250);
-      const community = roadAlerts.filter((alert) => alert.source === "Comunidad" && Date.now() - alert.createdAt < ALERT_DETAILS[alert.kind].expires);
-      setRoadAlerts([...community, ...official, ...cameras]);
+      const shared: RoadAlert[] = sharedData.map((item: { id: string; kind: AlertKind; latitude: number; longitude: number; created_at: string; confirmations: number }) => ({
+        id: `shared-${item.id}`,
+        kind: item.kind,
+        coordinates: [item.longitude, item.latitude],
+        createdAt: Date.parse(item.created_at),
+        confirmations: item.confirmations,
+        source: "Comunidad",
+      })).filter((alert: RoadAlert) => distanceBetween(point, alert.coordinates) < 100000);
+      const community = roadAlerts.filter((alert) => alert.id.startsWith("local-") && Date.now() - alert.createdAt < ALERT_DETAILS[alert.kind].expires);
+      setRoadAlerts([...community, ...shared, ...official, ...cameras]);
       localStorage.setItem("via-clara-alerts", JSON.stringify(community));
-      setStatus(`${official.length} incidencias DGT · ${cameras.length} radares · ${community.length} avisos`);
+      setStatus(`${official.length} DGT · ${cameras.length} radares · ${shared.length} avisos compartidos`);
     } catch {
       setStatus("No se pudieron actualizar ahora las alertas");
     }
   }
 
-  function reportAlert(kind: Exclude<AlertKind, "radar">) {
+  async function reportAlert(kind: Exclude<AlertKind, "radar">) {
     const alert: RoadAlert = {
       id: `local-${Date.now()}`,
       kind,
@@ -495,11 +521,28 @@ export default function Home() {
       confirmations: 1,
       source: "Comunidad",
     };
-    const community = [alert, ...roadAlerts.filter((item) => item.source === "Comunidad")];
-    setRoadAlerts([...community, ...roadAlerts.filter((item) => item.source !== "Comunidad")]);
-    localStorage.setItem("via-clara-alerts", JSON.stringify(community));
     setShowReport(false);
-    setStatus(`${ALERT_DETAILS[kind].label} comunicado en tu posición`);
+    setStatus("Compartiendo aviso con la comunidad…");
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/report_road_incident`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          p_kind: kind,
+          p_latitude: origin[1],
+          p_longitude: origin[0],
+          p_device_id: deviceId(),
+        }),
+      });
+      if (!response.ok) throw new Error("shared report");
+      setStatus(`${ALERT_DETAILS[kind].label} compartido con todos los conductores`);
+      await loadSafetyAlerts(origin);
+    } catch {
+      const community = [alert, ...roadAlerts.filter((item) => item.id.startsWith("local-"))];
+      setRoadAlerts([...community, ...roadAlerts.filter((item) => !item.id.startsWith("local-"))]);
+      localStorage.setItem("via-clara-alerts", JSON.stringify(community));
+      setStatus("Sin conexión: aviso guardado solo en este dispositivo");
+    }
   }
 
   function locateMe() {
@@ -699,7 +742,7 @@ export default function Home() {
               <p>Se marcará en tu posición actual y caducará automáticamente.</p>
               <div className="report-grid">
                 {(["accident", "traffic", "works", "hazard", "vehicle"] as const).map((kind) => (
-                  <button key={kind} onClick={() => reportAlert(kind)}>
+                  <button key={kind} onClick={() => void reportAlert(kind)}>
                     <span style={{ background: ALERT_DETAILS[kind].color }}>{ALERT_DETAILS[kind].icon}</span>
                     {ALERT_DETAILS[kind].label}
                   </button>
@@ -811,7 +854,7 @@ export default function Home() {
             <button onClick={() => void loadSafetyAlerts()}>Actualizar</button>
             <button className="report-button" onClick={() => setShowReport(true)}>＋ Comunicar</button>
           </div>
-          <p><b>{roadAlerts.length}</b> alertas visibles · Incidencias oficiales DGT, radares de OpenStreetMap y avisos del dispositivo.</p>
+          <p><b>{roadAlerts.length}</b> alertas visibles · DGT, radares de OpenStreetMap y avisos compartidos de Vía Clara.</p>
         </section>
 
         <div className="route-title">
