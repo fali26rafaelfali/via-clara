@@ -24,7 +24,9 @@ type RoadAlert = {
   coordinates: Coordinates;
   createdAt: number;
   confirmations: number;
-  source: "OpenStreetMap" | "Comunidad";
+  source: "OpenStreetMap" | "Comunidad" | "DGT";
+  road?: string;
+  municipality?: string;
 };
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -215,7 +217,7 @@ export default function Home() {
         element.title = `${details.label} · ${alert.source}`;
         element.setAttribute("aria-label", element.title);
         element.style.backgroundColor = details.color;
-        element.onclick = () => setStatus(`${details.label} · Fuente: ${alert.source} · ${alert.confirmations} confirmaciones`);
+        element.onclick = () => setStatus(`${details.label}${alert.road ? ` en ${alert.road}` : ""} · Fuente: ${alert.source}`);
         return new Marker({ element }).setLngLat(alert.coordinates).addTo(map);
       });
     };
@@ -460,6 +462,10 @@ export default function Home() {
       const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
       if (!response.ok) throw new Error("alerts");
       const data = await response.json();
+      const base = window.location.pathname.startsWith("/via-clara") ? "/via-clara" : "";
+      const dgtData = await fetch(`${base}/dgt-incidents.json`, { cache: "no-store" })
+        .then((result) => result.ok ? result.json() : { incidents: [] })
+        .catch(() => ({ incidents: [] }));
       const cameras: RoadAlert[] = (data.elements ?? []).map((item: { id: number; lat?: number; lon?: number; center?: { lat: number; lon: number } }) => ({
         id: `osm-radar-${item.id}`,
         kind: "radar",
@@ -468,10 +474,13 @@ export default function Home() {
         confirmations: 0,
         source: "OpenStreetMap",
       })).filter((item: RoadAlert) => Number.isFinite(item.coordinates[0]));
+      const official: RoadAlert[] = (dgtData.incidents ?? [])
+        .filter((alert: RoadAlert) => distanceBetween(point, alert.coordinates) < 100000)
+        .slice(0, 250);
       const community = roadAlerts.filter((alert) => alert.source === "Comunidad" && Date.now() - alert.createdAt < ALERT_DETAILS[alert.kind].expires);
-      setRoadAlerts([...community, ...cameras]);
+      setRoadAlerts([...community, ...official, ...cameras]);
       localStorage.setItem("via-clara-alerts", JSON.stringify(community));
-      setStatus(`${cameras.length} radares y ${community.length} avisos comunitarios cerca`);
+      setStatus(`${official.length} incidencias DGT · ${cameras.length} radares · ${community.length} avisos`);
     } catch {
       setStatus("No se pudieron actualizar ahora las alertas");
     }
@@ -487,7 +496,7 @@ export default function Home() {
       source: "Comunidad",
     };
     const community = [alert, ...roadAlerts.filter((item) => item.source === "Comunidad")];
-    setRoadAlerts([...community, ...roadAlerts.filter((item) => item.source === "OpenStreetMap")]);
+    setRoadAlerts([...community, ...roadAlerts.filter((item) => item.source !== "Comunidad")]);
     localStorage.setItem("via-clara-alerts", JSON.stringify(community));
     setShowReport(false);
     setStatus(`${ALERT_DETAILS[kind].label} comunicado en tu posición`);
@@ -802,7 +811,7 @@ export default function Home() {
             <button onClick={() => void loadSafetyAlerts()}>Actualizar</button>
             <button className="report-button" onClick={() => setShowReport(true)}>＋ Comunicar</button>
           </div>
-          <p><b>{roadAlerts.length}</b> alertas visibles · Radares de OpenStreetMap y avisos guardados en este dispositivo.</p>
+          <p><b>{roadAlerts.length}</b> alertas visibles · Incidencias oficiales DGT, radares de OpenStreetMap y avisos del dispositivo.</p>
         </section>
 
         <div className="route-title">

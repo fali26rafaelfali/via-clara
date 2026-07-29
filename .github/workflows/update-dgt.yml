@@ -1,0 +1,27 @@
+name: Actualizar incidencias DGT
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Descargar y transformar DATEX II
+        run: node scripts/update-dgt.mjs
+      - name: Publicar cambios
+        run: |
+          git config user.name "via-clara-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/dgt-incidents.json
+          git diff --cached --quiet || git commit -m "Update DGT traffic incidents"
+          git push
