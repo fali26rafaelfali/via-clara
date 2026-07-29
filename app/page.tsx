@@ -15,6 +15,8 @@ import {
 type Coordinates = [number, number];
 type RouteKind = "calm" | "fast" | "eco";
 type Place = { label: string; coordinates: Coordinates };
+type SavedPlace = Place & { kind: "Casa" | "Trabajo" | "Favorito" };
+type NearbyPlace = Place & { type: string };
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -129,6 +131,16 @@ export default function Home() {
   const [muted, setMuted] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [showTools, setShowTools] = useState(false);
+  const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
+  const [recentPlaces, setRecentPlaces] = useState<Place[]>([]);
+  const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
+  const [vehicle, setVehicle] = useState<"Coche" | "Eléctrico" | "Moto" | "Caravana">("Coche");
+  const [consumption, setConsumption] = useState(6.5);
+  const [energyPrice, setEnergyPrice] = useState(1.6);
+  const [avoidTolls, setAvoidTolls] = useState(false);
+  const [avoidHighways, setAvoidHighways] = useState(false);
+  const [weather, setWeather] = useState<{ temperature: number; wind: number } | null>(null);
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current) return;
@@ -150,6 +162,37 @@ export default function Home() {
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      setSavedPlaces(JSON.parse(localStorage.getItem("via-clara-saved") ?? "[]"));
+      setRecentPlaces(JSON.parse(localStorage.getItem("via-clara-recent") ?? "[]"));
+      const settings = JSON.parse(localStorage.getItem("via-clara-vehicle") ?? "{}");
+      if (settings.vehicle) setVehicle(settings.vehicle);
+      if (settings.consumption) setConsumption(settings.consumption);
+      if (settings.energyPrice) setEnergyPrice(settings.energyPrice);
+      setAvoidTolls(Boolean(settings.avoidTolls));
+      setAvoidHighways(Boolean(settings.avoidHighways));
+    } catch {
+      // Keep safe defaults when local preferences are unavailable.
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("via-clara-vehicle", JSON.stringify({ vehicle, consumption, energyPrice, avoidTolls, avoidHighways }));
+  }, [vehicle, consumption, energyPrice, avoidTolls, avoidHighways]);
+
+  useEffect(() => {
+    if (!destinationPoint) {
+      setWeather(null);
+      return;
+    }
+    const [longitude, latitude] = destinationPoint;
+    void fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m`)
+      .then((response) => response.json())
+      .then((data) => setWeather({ temperature: data.current.temperature_2m, wind: data.current.wind_speed_10m }))
+      .catch(() => setWeather(null));
+  }, [destinationPoint]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -325,7 +368,43 @@ export default function Home() {
     setDestinationPoint(place.coordinates);
     setSuggestions([]);
     setStarted(false);
+    const updatedRecents = [place, ...recentPlaces.filter((item) => item.label !== place.label)].slice(0, 4);
+    setRecentPlaces(updatedRecents);
+    localStorage.setItem("via-clara-recent", JSON.stringify(updatedRecents));
     void calculateRoutes(place.coordinates);
+  }
+
+  function saveCurrentPlace(kind: SavedPlace["kind"]) {
+    if (!destinationPoint || !destination) {
+      setStatus("Elige primero un destino para guardarlo");
+      return;
+    }
+    const place: SavedPlace = { label: destination, coordinates: destinationPoint, kind };
+    const updated = [place, ...savedPlaces.filter((item) => item.kind !== kind || kind === "Favorito")].slice(0, 8);
+    setSavedPlaces(updated);
+    localStorage.setItem("via-clara-saved", JSON.stringify(updated));
+    setStatus(`${kind} guardado en este dispositivo`);
+  }
+
+  async function findNearby(type: "fuel" | "parking" | "charging_station" | "restaurant") {
+    setLoading(true);
+    setStatus("Buscando lugares cercanos…");
+    try {
+      const query = `[out:json][timeout:15];nwr(around:3000,${origin[1]},${origin[0]})[amenity=${type}];out center 8;`;
+      const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      const places: NearbyPlace[] = (data.elements ?? []).map((item: { lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }) => ({
+        label: item.tags?.name ?? ({ fuel: "Gasolinera", parking: "Aparcamiento", charging_station: "Cargador", restaurant: "Restaurante" }[type]),
+        coordinates: [item.lon ?? item.center?.lon, item.lat ?? item.center?.lat] as Coordinates,
+        type,
+      })).filter((item: NearbyPlace) => Number.isFinite(item.coordinates[0])).slice(0, 6);
+      setNearbyPlaces(places);
+      setStatus(`${places.length} lugares encontrados cerca de ti`);
+    } catch {
+      setStatus("No se pudieron cargar los lugares cercanos");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function locateMe() {
@@ -458,6 +537,7 @@ export default function Home() {
 
   const navigationSteps = activeRoute?.legs.flatMap((leg) => leg.steps) ?? [];
   const currentInstruction = instructionFor(navigationSteps[currentStepIndex]);
+  const tripCost = activeRoute ? (activeRoute.distance / 1000 / 100) * consumption * energyPrice : 0;
 
   async function installApp() {
     if (!installPrompt) {
@@ -502,6 +582,18 @@ export default function Home() {
           <h1>Llega bien,<br />no solo rápido.</h1>
           <p>Busca un destino y permite tu ubicación para calcular el viaje desde donde estás.</p>
           <button className="install-button" onClick={installApp}><span>＋</span> Instalar Vía Clara</button>
+          {(savedPlaces.length > 0 || recentPlaces.length > 0) && (
+            <div className="quick-places">
+              {savedPlaces.slice(0, 3).map((place) => (
+                <button key={`${place.kind}-${place.label}`} onClick={() => choosePlace(place)}>
+                  <span>{place.kind === "Casa" ? "⌂" : place.kind === "Trabajo" ? "▣" : "★"}</span>{place.kind}
+                </button>
+              ))}
+              {recentPlaces.slice(0, 2).map((place) => (
+                <button key={`recent-${place.label}`} onClick={() => choosePlace(place)}><span>↶</span>{place.label.split(",")[0]}</button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="search-box">
@@ -531,6 +623,52 @@ export default function Home() {
 
         <button className="gps-button" onClick={locateMe}><span>◎</span> Usar mi ubicación actual</button>
         <div className="status-line"><span className={loading ? "pulse" : ""} />{status}</div>
+
+        <button className="tools-toggle" onClick={() => setShowTools((value) => !value)}>
+          <span>✦</span> Herramientas de viaje <b>{showTools ? "−" : "+"}</b>
+        </button>
+        {showTools && (
+          <section className="travel-tools">
+            <div className="tool-block">
+              <strong>Guardar destino</strong>
+              <div className="mini-actions">
+                <button onClick={() => saveCurrentPlace("Casa")}>⌂ Casa</button>
+                <button onClick={() => saveCurrentPlace("Trabajo")}>▣ Trabajo</button>
+                <button onClick={() => saveCurrentPlace("Favorito")}>★ Favorito</button>
+              </div>
+            </div>
+            <div className="tool-block">
+              <strong>Explorar cerca</strong>
+              <div className="mini-actions">
+                <button onClick={() => void findNearby("fuel")}>⛽ Gasolineras</button>
+                <button onClick={() => void findNearby("parking")}>P Aparcar</button>
+                <button onClick={() => void findNearby("charging_station")}>⚡ Cargadores</button>
+                <button onClick={() => void findNearby("restaurant")}>● Comer</button>
+              </div>
+              {nearbyPlaces.length > 0 && (
+                <div className="nearby-list">
+                  {nearbyPlaces.map((place) => <button key={`${place.label}-${place.coordinates.join("-")}`} onClick={() => choosePlace(place)}>{place.label}<span>Ir →</span></button>)}
+                </div>
+              )}
+            </div>
+            <div className="tool-grid">
+              <label>Vehículo<select value={vehicle} onChange={(event) => setVehicle(event.target.value as typeof vehicle)}><option>Coche</option><option>Eléctrico</option><option>Moto</option><option>Caravana</option></select></label>
+              <label>Consumo<input type="number" min="1" step="0.1" value={consumption} onChange={(event) => setConsumption(Number(event.target.value))} /><small>{vehicle === "Eléctrico" ? "kWh/100 km" : "L/100 km"}</small></label>
+              <label>Precio<input type="number" min="0" step="0.01" value={energyPrice} onChange={(event) => setEnergyPrice(Number(event.target.value))} /><small>€/unidad</small></label>
+            </div>
+            <div className="preference-switches">
+              <label><input type="checkbox" checked={avoidTolls} onChange={(event) => setAvoidTolls(event.target.checked)} /> Evitar peajes</label>
+              <label><input type="checkbox" checked={avoidHighways} onChange={(event) => setAvoidHighways(event.target.checked)} /> Evitar autopistas</label>
+              <small>Preferencias beta: se guardan para el próximo motor avanzado de rutas.</small>
+            </div>
+            {(activeRoute || weather) && (
+              <div className="trip-insights">
+                {activeRoute && <span><small>Coste estimado</small><strong>{tripCost.toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</strong></span>}
+                {weather && <span><small>Tiempo en destino</small><strong>{Math.round(weather.temperature)} °C · viento {Math.round(weather.wind)} km/h</strong></span>}
+              </div>
+            )}
+          </section>
+        )}
 
         <div className="route-title">
           <strong>¿Qué ruta prefieres?</strong>
