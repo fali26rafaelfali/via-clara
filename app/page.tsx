@@ -9,6 +9,7 @@ import {
   Map as MapLibreMap,
   Marker,
   NavigationControl,
+  StyleSpecification,
 } from "maplibre-gl";
 
 type Coordinates = [number, number];
@@ -28,6 +29,19 @@ type RouteResult = {
 };
 
 const MADRID: Coordinates = [-3.7038, 40.4168];
+const OSM_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    openstreetmap: {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: "© OpenStreetMap contributors",
+    },
+  },
+  layers: [{ id: "openstreetmap", type: "raster", source: "openstreetmap" }],
+};
 const routeLabels: Record<RouteKind, { label: string; note: string; color: string }> = {
   calm: { label: "Tranquila", note: "Alternativa con un ritmo más relajado", color: "#176b4a" },
   fast: { label: "Rápida", note: "La llegada más directa ahora mismo", color: "#d86641" },
@@ -103,7 +117,7 @@ export default function Home() {
     if (!mapNode.current || mapRef.current) return;
     const map = new MapLibreMap({
       container: mapNode.current,
-      style: "https://tiles.openfreemap.org/styles/positron",
+      style: OSM_STYLE,
       center: MADRID,
       zoom: 12.5,
       attributionControl: false,
