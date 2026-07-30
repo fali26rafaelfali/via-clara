@@ -23,6 +23,7 @@ import {
   LocateFixed,
   LogIn,
   LogOut,
+  MessageCircle,
   Moon,
   Navigation,
   SquareParking,
@@ -30,6 +31,7 @@ import {
   Search,
   Share2,
   ShieldCheck,
+  Siren,
   SlidersHorizontal,
   Star,
   Sun,
@@ -79,6 +81,7 @@ type RouteResult = {
   distance: number;
   legs: Array<{ steps: RouteStep[] }>;
 };
+type SharedTrip = { latitude: number; longitude: number; destination: string; eta: string; status: "driving" | "stopped" | "arrived" | "sos"; updated_at: string };
 
 const MADRID: Coordinates = [-3.7038, 40.4168];
 const NAVIGATION_BLUE = "#1677ff";
@@ -197,6 +200,9 @@ export default function Home() {
   const alertRefreshTimer = useRef<number | null>(null);
   const navigationStartedAt = useRef(0);
   const restReminderSpoken = useRef(false);
+  const sharedTripToken = useRef<string | null>(null);
+  const lastSharedTripUpdate = useRef(0);
+  const familyMarker = useRef<Marker | null>(null);
   const [origin, setOrigin] = useState<Coordinates>(MADRID);
   const [destination, setDestination] = useState("");
   const [destinationPoint, setDestinationPoint] = useState<Coordinates | null>(null);
@@ -236,6 +242,7 @@ export default function Home() {
   const [accountPassword, setAccountPassword] = useState("");
   const [accountBusy, setAccountBusy] = useState(false);
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [viewedTrip, setViewedTrip] = useState<SharedTrip | null>(null);
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current) return;
@@ -276,6 +283,29 @@ export default function Home() {
       window.removeEventListener("pageshow", resumeScreenLock);
     };
   }, [started]);
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("trip");
+    if (!token) return;
+    const load = async () => {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_shared_trip`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ p_token: token }),
+      });
+      if (!response.ok) return;
+      const [trip] = await response.json() as SharedTrip[];
+      if (!trip) return;
+      setViewedTrip(trip);
+      const point: Coordinates = [trip.longitude, trip.latitude];
+      if (!familyMarker.current && mapRef.current) familyMarker.current = new Marker({ color: "#c86442" }).setLngLat(point).addTo(mapRef.current);
+      else familyMarker.current?.setLngLat(point);
+      mapRef.current?.easeTo({ center: point, zoom: 14, duration: 700 });
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     try {
@@ -823,6 +853,10 @@ export default function Home() {
         const point: Coordinates = [coords.longitude, coords.latitude];
         latestOrigin.current = point;
         setOrigin(point);
+        if (sharedTripToken.current && Date.now() - lastSharedTripUpdate.current > 15000) {
+          lastSharedTripUpdate.current = Date.now();
+          void updateSharedTrip(point, "driving");
+        }
         originMarker.current?.setLngLat(point);
         mapRef.current?.flyTo({ center: point, zoom: 15 });
         setStatus("Ubicación GPS activada");
@@ -992,6 +1026,7 @@ export default function Home() {
       alertRefreshTimer.current = null;
     }
     window.speechSynthesis?.cancel();
+    if (sharedTripToken.current) void updateSharedTrip(latestOrigin.current, "stopped");
     void wakeLock.current?.release();
     wakeLock.current = null;
     setStarted(false);
@@ -1008,20 +1043,74 @@ export default function Home() {
   const zbeDestination = ZBE_CITIES.find((city) => destination.toLocaleLowerCase("es").includes(city));
   const zbeWarning = Boolean(zbeDestination && (environmentalBadge === "Sin etiqueta" || environmentalBadge === "B"));
 
-  async function shareTrip() {
+  async function updateSharedTrip(point: Coordinates, tripStatus: SharedTrip["status"]) {
+    if (!sharedTripToken.current || !activeRoute) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/rpc/update_shared_trip`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        p_token: sharedTripToken.current,
+        p_device_id: deviceId(),
+        p_latitude: point[1],
+        p_longitude: point[0],
+        p_eta: new Date(Date.now() + (remainingDuration || activeRoute.duration) * 1000).toISOString(),
+        p_status: tripStatus,
+      }),
+    });
+  }
+
+  async function shareTrip(messageKind: "live" | "departed" | "near" = "live") {
     if (!activeRoute || !destination) {
       setStatus("Elige primero un destino para compartir el viaje");
       return;
     }
-    const text = `Voy hacia ${destination}. Llegada estimada ${arrivalTime(remainingDuration || activeRoute.duration)}. Distancia ${formatDistance(remainingDistance || activeRoute.distance)}. Compartido desde Vía Clara.`;
     try {
-      if (navigator.share) await navigator.share({ title: "Mi viaje en Vía Clara", text, url: window.location.href });
+      if (!sharedTripToken.current) {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/start_shared_trip`, {
+          method: "POST",
+          headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            p_device_id: deviceId(),
+            p_latitude: latestOrigin.current[1],
+            p_longitude: latestOrigin.current[0],
+            p_destination: destination,
+            p_eta: new Date(Date.now() + (remainingDuration || activeRoute.duration) * 1000).toISOString(),
+          }),
+        });
+        if (response.ok) sharedTripToken.current = await response.json() as string;
+      }
+      const [longitude, latitude] = latestOrigin.current;
+      const shareUrl = sharedTripToken.current
+        ? `${window.location.origin}${window.location.pathname}?trip=${sharedTripToken.current}`
+        : `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=16/${latitude}/${longitude}`;
+      const prefix = messageKind === "departed" ? "Ya he salido." : messageKind === "near" ? "Ya me queda poco." : "Puedes seguir mi viaje en directo.";
+      const text = `${prefix} Voy hacia ${destination}. Llegada estimada ${arrivalTime(remainingDuration || activeRoute.duration)}.`;
+      if (navigator.share) await navigator.share({ title: "Mi viaje en Vía Clara", text, url: shareUrl });
       else {
-        await navigator.clipboard.writeText(`${text} ${window.location.href}`);
-        setStatus("Resumen del viaje copiado para compartir");
+        await navigator.clipboard.writeText(`${text} ${shareUrl}`);
+        setStatus("Enlace privado del viaje copiado");
       }
     } catch {
       setStatus("No se ha compartido el viaje");
+    }
+  }
+
+  async function shareEmergency() {
+    if (!activeRoute) {
+      setStatus("Inicia primero una ruta para usar el aviso SOS");
+      return;
+    }
+    if (sharedTripToken.current) await updateSharedTrip(latestOrigin.current, "sos");
+    const [longitude, latitude] = latestOrigin.current;
+    const text = `Necesito ayuda. Esta es mi última ubicación conocida: https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=17/${latitude}/${longitude}`;
+    try {
+      if (navigator.share) await navigator.share({ title: "Aviso SOS · Vía Clara", text });
+      else {
+        await navigator.clipboard.writeText(text);
+        setStatus("Aviso SOS copiado. Envíalo a una persona de confianza.");
+      }
+    } catch {
+      setStatus("El aviso SOS no se ha enviado");
     }
   }
 
@@ -1043,6 +1132,16 @@ export default function Home() {
           <span className="brand-mark">V</span>
           <div><strong>Vía Clara</strong><small>Tu ruta, a tu manera</small></div>
         </header>
+        {viewedTrip && (
+          <aside className={`family-viewer ${viewedTrip.status}`}>
+            <span className="family-viewer-icon">{viewedTrip.status === "sos" ? <Siren /> : <ShieldCheck />}</span>
+            <div>
+              <small>COPILOTO FAMILIAR · {viewedTrip.status === "sos" ? "AVISO SOS" : "VIAJE COMPARTIDO"}</small>
+              <strong>{viewedTrip.destination}</strong>
+              <p>Última actualización: {new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" }).format(new Date(viewedTrip.updated_at))} · llegada {new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" }).format(new Date(viewedTrip.eta))}</p>
+            </div>
+          </aside>
+        )}
         <button className="locate icon-button" onClick={locateMe} aria-label="Usar mi ubicación GPS" title="Usar mi ubicación GPS"><LocateFixed /></button>
         {started && activeRoute && (
           <div className="navigation-banner">
@@ -1071,6 +1170,11 @@ export default function Home() {
             <div className="safety-card-actions">
               <button onClick={() => void loadSafetyAlerts()}><RefreshCw /> Actualizar</button>
               <button className="report-button" onClick={() => setShowReport(true)}><CirclePlus /> Comunicar</button>
+            </div>
+            <div className="family-actions">
+              <button onClick={() => void shareTrip("departed")}><MessageCircle /> He salido</button>
+              <button onClick={() => void shareTrip("near")}><Share2 /> Me queda poco</button>
+              <button className="sos-button" onClick={() => void shareEmergency()}><Siren /> SOS</button>
             </div>
             <p><b>{roadAlerts.length}</b> alertas visibles · DGT, radares de OpenStreetMap y avisos compartidos de Vía Clara.</p>
           </section>
@@ -1275,7 +1379,7 @@ export default function Home() {
                 <div><small>ZONA DE BAJAS EMISIONES</small><strong>{zbeWarning ? `Revisa las restricciones de ${zbeDestination}` : `Etiqueta ${environmentalBadge}: comprueba las normas locales`}</strong></div>
               </div>
             )}
-            <button className="share-trip" onClick={() => void shareTrip()}><Share2 /> Compartir estado del viaje</button>
+            <button className="share-trip" onClick={() => void shareTrip()}><Share2 /> Activar copiloto familiar</button>
           </section>
         )}
 

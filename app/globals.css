@@ -66,6 +66,14 @@ button svg { width: 18px; height: 18px; flex: 0 0 auto; stroke-width: 2; }
 .brand strong, .brand small { display: block; }
 .brand strong { font: 750 17px "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: -.02em; }
 .brand small { color: #6b746e; margin-top: 2px; font-size: 11px; }
+.family-viewer { position: absolute; z-index: 8; top: 28px; left: 50%; width: min(470px, calc(100% - 28px)); display: grid; grid-template-columns: 42px 1fr; gap: 11px; align-items: center; padding: 14px 16px; border: 1px solid #d9cdbf; border-radius: 17px; background: #fffaf2ed; box-shadow: 0 12px 34px #30221825; transform: translateX(-50%); backdrop-filter: blur(14px); }
+.family-viewer-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; color: white; background: var(--green); }
+.family-viewer small, .family-viewer strong { display: block; }
+.family-viewer small { color: #8c523d; font-size: 10px; font-weight: 850; letter-spacing: .08em; }
+.family-viewer strong { margin-top: 2px; font-size: 15px; }
+.family-viewer p { margin: 3px 0 0; color: #6e675e; font-size: 11px; }
+.family-viewer.sos { border-color: #d96f57; background: #fff1edef; }
+.family-viewer.sos .family-viewer-icon { background: #b84432; animation: pulse 1s infinite; }
 .locate { position: absolute; bottom: 30px; right: 30px; width: 48px; height: 48px; border: 1px solid #ded7ca; border-radius: 16px; color: var(--clay); background: #fffdfa; box-shadow: 0 8px 24px #372a1d26; }
 .locate:hover { transform: translateY(-2px); box-shadow: 0 12px 28px #372a1d2b; }
 .navigation-banner { position: absolute; z-index: 5; left: 50%; top: 28px; transform: translateX(-50%); min-width: 340px; display: flex; align-items: center; gap: 16px; padding: 14px 15px; border-radius: 17px; color: white; background: #173f30; box-shadow: 0 12px 32px #183e2c40; }
@@ -198,6 +206,10 @@ h1 { margin: 11px 0 14px; font: 720 clamp(38px, 3.8vw, 56px)/1.02 "Segoe UI Vari
 .safety-card-actions button { min-height: 44px; flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px; border: 1px solid #d7d0c5; border-radius: 12px; color: #4d5e53; background: #fffdfa; font-size: 12px; font-weight: 800; box-shadow: var(--button-shadow); }
 .safety-card-actions button:hover { transform: translateY(-1px); border-color: #c8ac98; }
 .safety-card-actions .report-button { color: white; background: linear-gradient(135deg, #cb6848, #a94d35); border-color: #a94d35; box-shadow: 0 7px 16px #a94d3533; }
+.family-actions { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-top: 7px; }
+.family-actions button { min-height: 40px; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 7px 8px; border: 1px solid #d8d0c4; border-radius: 11px; color: #5e544b; background: #fffdfa; font-size: 11px; font-weight: 800; }
+.family-actions button svg { width: 15px; height: 15px; }
+.family-actions .sos-button { padding-inline: 12px; color: white; background: #a94332; border-color: #a94332; }
 .safety-card p { margin: 9px 0 0; color: #69746d; font-size: 10px; line-height: 1.45; }
 .navigation-safety-card { position: fixed; z-index: 55; left: 18px; bottom: 18px; width: min(350px, calc(100vw - 90px)); margin: 0; background: #fffefaef; box-shadow: 0 12px 35px #10201930; backdrop-filter: blur(14px); }
 .journey-assistant { display: grid; gap: 7px; margin-top: 10px; padding: 10px; border: 1px solid #d7ded9; border-radius: 16px; background: #fff; box-shadow: 0 7px 20px #1c32230a; }
