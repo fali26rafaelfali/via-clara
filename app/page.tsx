@@ -536,6 +536,7 @@ export default function Home() {
       context.lineJoin = "round";
       context.lineCap = "round";
       context.strokeStyle = "#0969ff";
+      // Keep one route stroke and taper it at distant zoom levels.
       const zoom = map.getZoom();
       context.lineWidth = zoom < 8 ? 3 : zoom < 12 ? 4 : started ? 5 : 4;
       context.stroke();
