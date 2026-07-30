@@ -96,8 +96,12 @@ button svg { width: 18px; height: 18px; flex: 0 0 auto; stroke-width: 2; }
 .nav-actions button { min-width: 34px; margin-left: 0; padding: 8px; }
 .nav-actions .exit-nav { display: inline-flex; align-items: center; gap: 5px; padding-inline: 10px; color: white; background: #bc5c3d; border-color: #d67e61; }
 .nav-actions .exit-nav svg { width: 15px; height: 15px; }
-.road-alert-marker { width: 31px; height: 31px; display: grid; place-items: center; border: 3px solid white; border-radius: 50% 50% 50% 8px; color: white; box-shadow: 0 4px 13px #0005; font-weight: 900; transform: rotate(-45deg); }
-.road-alert-marker::first-letter { transform: rotate(45deg); }
+.road-alert-marker { width: 36px; height: 36px; display: grid; place-items: center; border: 2px solid #fff; border-radius: 50% 50% 50% 9px; color: white; box-shadow: 0 5px 15px #14251d52, 0 0 0 2px #ffffff50; transform: rotate(-45deg); cursor: pointer; transition: scale .18s ease, filter .18s ease; }
+.road-alert-marker:hover, .road-alert-marker:focus-visible { z-index: 3; scale: 1.12; filter: saturate(1.12); outline: none; }
+.alert-marker-icon { width: 100%; height: 100%; display: grid; place-items: center; transform: rotate(45deg); }
+.alert-marker-icon svg { width: 20px; height: 20px; stroke-width: 2.4; }
+.road-alert-marker::after { content: attr(data-label); position: absolute; left: 28px; bottom: 27px; width: max-content; max-width: 150px; padding: 6px 8px; border: 1px solid #dfe4df; border-radius: 8px; color: #18231d; background: #fffefaf2; box-shadow: 0 5px 15px #13221b28; font: 800 11px/1.1 Inter, sans-serif; opacity: 0; pointer-events: none; transform: rotate(45deg) translateY(4px); transition: opacity .16s ease, translate .16s ease; }
+.road-alert-marker:hover::after, .road-alert-marker:focus-visible::after { opacity: 1; translate: 0 -3px; }
 .navigation-arrow { position: relative; width: 42px; height: 42px; border: 4px solid white; border-radius: 50%; background: #0969ff; box-shadow: 0 5px 18px #063d9966, 0 0 0 2px #0969ff33; }
 .navigation-arrow::before { content: ""; position: absolute; left: 50%; top: 7px; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 18px solid white; transform: translateX(-50%); filter: drop-shadow(0 1px 1px #0648ad); }
 .navigation-arrow::after { content: ""; position: absolute; left: 50%; top: 20px; width: 6px; height: 12px; border-radius: 4px; background: white; transform: translateX(-50%); }
@@ -116,12 +120,14 @@ button svg { width: 18px; height: 18px; flex: 0 0 auto; stroke-width: 2; }
 .report-card > p { color: #667169; font-size: 13px; }
 .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 16px 0; }
 .report-grid button { min-height: 52px; display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #d7ddd8; border-radius: 13px; color: var(--ink); background: white; text-align: left; font-size: 12px; font-weight: 750; box-shadow: 0 4px 12px #1c322307; }
-.report-grid button span { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 9px; color: white; }
+.report-grid button span { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 10px; color: white; }
+.report-grid button span svg { width: 18px; height: 18px; stroke-width: 2.4; }
 .safety-note { display: block; color: #8a5e47; font-size: 11px; line-height: 1.45; }
 .alert-detail { position: fixed; z-index: 101; inset: 0; display: grid; place-items: end center; padding: 18px; background: #10201966; backdrop-filter: blur(5px); }
 .alert-detail-card { position: relative; width: min(390px, 100%); padding: 22px; border-radius: 22px; background: var(--paper); box-shadow: 0 24px 70px #0005; text-align: center; }
 .alert-detail-close { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border: 0; border-radius: 50%; color: var(--ink); background: #e8ede9; font-size: 21px; }
-.alert-detail-icon { width: 54px; height: 54px; display: grid; place-items: center; margin: 0 auto 11px; border-radius: 17px; color: white; font-size: 27px; font-weight: 900; }
+.alert-detail-icon { width: 54px; height: 54px; display: grid; place-items: center; margin: 0 auto 11px; border-radius: 17px; color: white; }
+.alert-detail-icon svg { width: 29px; height: 29px; stroke-width: 2.3; }
 .alert-detail-card > small { display: block; color: var(--green); font-size: 8px; font-weight: 850; letter-spacing: .13em; }
 .alert-detail-card > strong { display: block; margin-top: 5px; font: 700 25px "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: -.025em; }
 .alert-detail-card > p { margin: 7px 0; color: #68736c; font-size: 13px; }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createRoot, Root } from "react-dom/client";
 import {
   AttributionControl,
   LngLatBounds,
@@ -12,9 +13,13 @@ import {
 } from "maplibre-gl";
 import {
   BriefcaseBusiness,
+  Ambulance,
+  CarFront,
   Check,
+  CircleGauge,
   CirclePlus,
   Cloud,
+  Construction,
   Download,
   Fuel,
   Home as HomeIcon,
@@ -25,6 +30,7 @@ import {
   MessageCircle,
   Moon,
   Navigation,
+  OctagonAlert,
   SquareParking,
   RefreshCw,
   Search,
@@ -35,6 +41,7 @@ import {
   Star,
   Sun,
   TriangleAlert,
+  TrafficCone,
   Utensils,
   Volume2,
   VolumeX,
@@ -95,6 +102,19 @@ const ALERT_DETAILS: Record<AlertKind, { label: string; icon: string; color: str
   hazard: { label: "Peligro", icon: "!", color: "#7859b8", expires: 2 * 60 * 60 * 1000 },
   vehicle: { label: "Vehículo detenido", icon: "▰", color: "#3978a8", expires: 60 * 60 * 1000 },
 };
+const ALERT_ICONS = {
+  radar: CircleGauge,
+  accident: Ambulance,
+  traffic: TrafficCone,
+  works: Construction,
+  hazard: OctagonAlert,
+  vehicle: CarFront,
+} satisfies Record<AlertKind, typeof CircleGauge>;
+
+function AlertGlyph({ kind }: { kind: AlertKind }) {
+  const Icon = ALERT_ICONS[kind];
+  return <Icon aria-hidden="true" />;
+}
 const OSM_STYLE: StyleSpecification = {
   version: 8,
   sources: {
@@ -216,6 +236,7 @@ export default function Home() {
   const lastRecalculation = useRef(0);
   const wakeLock = useRef<ScreenWakeLock | null>(null);
   const alertMarkers = useRef<Marker[]>([]);
+  const alertMarkerRoots = useRef<Root[]>([]);
   const warnedAlerts = useRef<Set<string>>(new Set());
   const roadAlertsRef = useRef<RoadAlert[]>([]);
   const latestOrigin = useRef<Coordinates>(MADRID);
@@ -358,15 +379,20 @@ export default function Home() {
     const map = mapRef.current;
     if (!map) return;
     const render = () => {
+      alertMarkerRoots.current.forEach((root) => root.unmount());
+      alertMarkerRoots.current = [];
       alertMarkers.current.forEach((marker) => marker.remove());
       alertMarkers.current = roadAlerts.map((alert) => {
         const details = ALERT_DETAILS[alert.kind];
         const element = document.createElement("button");
         element.className = `road-alert-marker ${alert.kind}`;
-        element.textContent = details.icon;
         element.title = `${details.label} · ${alert.source}`;
         element.setAttribute("aria-label", element.title);
+        element.dataset.label = details.label;
         element.style.backgroundColor = details.color;
+        const iconRoot = createRoot(element);
+        iconRoot.render(<span className="alert-marker-icon"><AlertGlyph kind={alert.kind} /></span>);
+        alertMarkerRoots.current.push(iconRoot);
         element.onclick = () => {
           setSelectedAlert(alert);
           setStatus(`${details.label}${alert.road ? ` en ${alert.road}` : ""} · Fuente: ${alert.source}`);
@@ -376,7 +402,11 @@ export default function Home() {
     };
     if (map.isStyleLoaded()) render();
     else map.once("load", render);
-    return () => alertMarkers.current.forEach((marker) => marker.remove());
+    return () => {
+      alertMarkerRoots.current.forEach((root) => root.unmount());
+      alertMarkerRoots.current = [];
+      alertMarkers.current.forEach((marker) => marker.remove());
+    };
   }, [roadAlerts]);
 
   useEffect(() => {
@@ -1262,7 +1292,7 @@ export default function Home() {
               <div className="report-grid">
                 {(["accident", "traffic", "works", "hazard", "vehicle"] as const).map((kind) => (
                   <button key={kind} onClick={() => void reportAlert(kind)}>
-                    <span style={{ background: ALERT_DETAILS[kind].color }}>{ALERT_DETAILS[kind].icon}</span>
+                    <span style={{ background: ALERT_DETAILS[kind].color }}><AlertGlyph kind={kind} /></span>
                     {ALERT_DETAILS[kind].label}
                   </button>
                 ))}
@@ -1276,7 +1306,7 @@ export default function Home() {
             <div className="alert-detail-card">
               <button className="alert-detail-close" onClick={() => setSelectedAlert(null)} aria-label="Cerrar">×</button>
               <span className="alert-detail-icon" style={{ background: ALERT_DETAILS[selectedAlert.kind].color }}>
-                {ALERT_DETAILS[selectedAlert.kind].icon}
+                <AlertGlyph kind={selectedAlert.kind} />
               </span>
               <small>{selectedAlert.source === "Comunidad" ? "COMUNIDAD VÍA CLARA" : `FUENTE ${selectedAlert.source.toUpperCase()}`}</small>
               <strong>{ALERT_DETAILS[selectedAlert.kind].label}</strong>
