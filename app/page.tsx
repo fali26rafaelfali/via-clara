@@ -186,6 +186,7 @@ export default function Home() {
   const mapNode = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const originMarker = useRef<Marker | null>(null);
+  const navigationMarker = useRef<Marker | null>(null);
   const destinationMarker = useRef<Marker | null>(null);
   const watchId = useRef<number | null>(null);
   const lastSpokenStep = useRef(-1);
@@ -261,6 +262,7 @@ export default function Home() {
       if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
       if (alertRefreshTimer.current !== null) window.clearInterval(alertRefreshTimer.current);
       window.speechSynthesis?.cancel();
+      navigationMarker.current?.remove();
       map.remove();
       mapRef.current = null;
     };
@@ -895,6 +897,23 @@ export default function Home() {
     setStatus("Navegación activa · cargando alertas de seguridad");
     const steps = activeRoute.legs.flatMap((leg) => leg.steps);
     const routeCoordinates = activeRoute.geometry.coordinates as Coordinates[];
+    const map = mapRef.current;
+    if (map?.getLayer("route")) {
+      map.setPaintProperty("route", "line-color", "#0969ff");
+      map.setPaintProperty("route", "line-width", 11);
+      map.setPaintProperty("route", "line-opacity", 1);
+    }
+    if (map?.getLayer("route-casing")) {
+      map.setPaintProperty("route-casing", "line-width", 17);
+      map.setPaintProperty("route-casing", "line-opacity", 0.96);
+    }
+    originMarker.current?.getElement().style.setProperty("display", "none");
+    navigationMarker.current?.remove();
+    const arrow = document.createElement("div");
+    arrow.className = "navigation-arrow";
+    navigationMarker.current = new Marker({ element: arrow, rotationAlignment: "map", pitchAlignment: "map" })
+      .setLngLat(origin)
+      .addTo(map!);
     void keepScreenAwake();
     watchId.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
@@ -903,6 +922,8 @@ export default function Home() {
         setOrigin(point);
         setSpeed(Math.max(0, Math.round((coords.speed ?? 0) * 3.6)));
         originMarker.current?.setLngLat(point);
+        navigationMarker.current?.setLngLat(point);
+        if (coords.heading !== null && Number.isFinite(coords.heading)) navigationMarker.current?.setRotation(coords.heading);
         mapRef.current?.easeTo({
           center: point,
           zoom: 17,
@@ -1029,6 +1050,12 @@ export default function Home() {
     if (sharedTripToken.current) void updateSharedTrip(latestOrigin.current, "stopped");
     void wakeLock.current?.release();
     wakeLock.current = null;
+    navigationMarker.current?.remove();
+    navigationMarker.current = null;
+    originMarker.current?.getElement().style.removeProperty("display");
+    const map = mapRef.current;
+    if (map?.getLayer("route")) map.setPaintProperty("route", "line-width", 8);
+    if (map?.getLayer("route-casing")) map.setPaintProperty("route-casing", "line-width", 13);
     setStarted(false);
     setSpeed(0);
     mapRef.current?.easeTo({ pitch: 0, bearing: 0, duration: 500 });
