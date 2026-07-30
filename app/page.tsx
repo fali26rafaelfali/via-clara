@@ -1033,10 +1033,19 @@ export default function Home() {
             </div>
           </div>
         )}
-        <div className="safety-legend">
-          <button onClick={() => void focusSafetyAlerts()} title="Mostrar todas las alertas en el mapa"><span>◉</span> Ver alertas <b>{roadAlerts.length}</b></button>
-          <label><input type="checkbox" checked={alertsEnabled} onChange={(event) => setAlertsEnabled(event.target.checked)} /> Voz</label>
-        </div>
+        {started && (
+          <section className="safety-card navigation-safety-card">
+            <button className="safety-heading" onClick={() => void focusSafetyAlerts()} title="Mostrar todas las alertas en el mapa">
+              <span className="safety-icon">◉</span>
+              <span><strong>Seguridad en ruta</strong><small>Radares y avisos cercanos</small></span>
+            </button>
+            <div className="safety-card-actions">
+              <button onClick={() => void loadSafetyAlerts()}>Actualizar</button>
+              <button className="report-button" onClick={() => setShowReport(true)}>＋ Comunicar</button>
+            </div>
+            <p><b>{roadAlerts.length}</b> alertas visibles · DGT, radares de OpenStreetMap y avisos compartidos de Vía Clara.</p>
+          </section>
+        )}
         {showReport && (
           <div className="report-sheet" role="dialog" aria-modal="true" aria-label="Comunicar incidencia">
             <div className="report-card">
@@ -1240,15 +1249,6 @@ export default function Home() {
             <button className="share-trip" onClick={() => void shareTrip()}>↗ Compartir estado del viaje</button>
           </section>
         )}
-
-        <section className="safety-card">
-          <div><span className="safety-icon">◉</span><div><strong>Seguridad en ruta</strong><small>Radares y avisos cercanos</small></div></div>
-          <div className="safety-card-actions">
-            <button onClick={() => void loadSafetyAlerts()}>Actualizar</button>
-            <button className="report-button" onClick={() => setShowReport(true)}>＋ Comunicar</button>
-          </div>
-          <p><b>{roadAlerts.length}</b> alertas visibles · DGT, radares de OpenStreetMap y avisos compartidos de Vía Clara.</p>
-        </section>
 
         <div className="route-title">
           <strong>¿Qué ruta prefieres?</strong>

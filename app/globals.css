@@ -177,6 +177,7 @@ h1 { margin: 11px 0 14px; font: 720 clamp(38px, 3.8vw, 56px)/1.02 "Segoe UI Vari
 .trip-insights strong { margin-top: 2px; font: 600 12px Georgia, serif; }
 .safety-card { margin-top: 10px; padding: 14px; border: 1px solid #d5dad6; border-radius: 16px; background: linear-gradient(145deg, #f5faf7, #edf5f0); box-shadow: 0 7px 20px #1c32230a; }
 .safety-card > div:first-child { display: flex; align-items: center; gap: 9px; }
+.safety-heading { width: 100%; display: flex; align-items: center; gap: 9px; padding: 0; border: 0; color: var(--ink); background: transparent; text-align: left; }
 .safety-card strong, .safety-card small { display: block; }
 .safety-card strong { font-size: 14px; }
 .safety-card small { margin-top: 2px; color: #69746d; font-size: 11px; }
@@ -185,6 +186,7 @@ h1 { margin: 11px 0 14px; font: 720 clamp(38px, 3.8vw, 56px)/1.02 "Segoe UI Vari
 .safety-card-actions button { min-height: 42px; flex: 1; padding: 8px; border: 1px solid #c6d0c9; border-radius: 10px; color: var(--green); background: white; font-size: 12px; font-weight: 800; }
 .safety-card-actions .report-button { color: white; background: #be3c32; border-color: #be3c32; }
 .safety-card p { margin: 9px 0 0; color: #69746d; font-size: 10px; line-height: 1.45; }
+.navigation-safety-card { position: fixed; z-index: 55; left: 18px; bottom: 18px; width: min(350px, calc(100vw - 90px)); margin: 0; background: #fffefaef; box-shadow: 0 12px 35px #10201930; backdrop-filter: blur(14px); }
 .journey-assistant { display: grid; gap: 7px; margin-top: 10px; padding: 10px; border: 1px solid #d7ded9; border-radius: 16px; background: #fff; box-shadow: 0 7px 20px #1c32230a; }
 .journey-signal { display: grid; grid-template-columns: 34px 1fr auto; gap: 9px; align-items: center; min-height: 50px; padding: 8px 9px; border-radius: 12px; background: #edf6f0; }
 .journey-signal > span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: #176b4a; background: white; font-size: 18px; }
@@ -339,4 +341,5 @@ body.dark-mode .alert-detail-meta span { color: #dce7e0; background: #263b30; }
   .start-button { min-height: 56px; }
   .report-card, .alert-detail-card { padding: 19px 16px; }
   .map-wrap { min-height: 39vh; }
+  .navigation-safety-card { left: 10px; bottom: 10px; width: min(310px, calc(100vw - 70px)); padding: 11px; }
 }
