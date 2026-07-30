@@ -535,11 +535,9 @@ export default function Home() {
       });
       context.lineJoin = "round";
       context.lineCap = "round";
-      context.strokeStyle = "#ffffff";
-      context.lineWidth = started ? 11 : 9;
-      context.stroke();
       context.strokeStyle = "#0969ff";
-      context.lineWidth = started ? 7 : 5;
+      const zoom = map.getZoom();
+      context.lineWidth = zoom < 8 ? 3 : zoom < 12 ? 4 : started ? 5 : 4;
       context.stroke();
     };
     draw();
