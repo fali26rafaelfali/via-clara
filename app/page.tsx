@@ -11,6 +11,35 @@ import {
   NavigationControl,
   StyleSpecification,
 } from "maplibre-gl";
+import {
+  BriefcaseBusiness,
+  Check,
+  CirclePlus,
+  Cloud,
+  Download,
+  Fuel,
+  Home as HomeIcon,
+  Leaf,
+  LocateFixed,
+  LogIn,
+  LogOut,
+  Moon,
+  Navigation,
+  SquareParking,
+  RefreshCw,
+  Search,
+  Share2,
+  ShieldCheck,
+  SlidersHorizontal,
+  Star,
+  Sun,
+  TriangleAlert,
+  Utensils,
+  Volume2,
+  VolumeX,
+  X,
+  Zap,
+} from "lucide-react";
 
 type Coordinates = [number, number];
 type RouteKind = "calm" | "fast" | "eco";
@@ -1014,7 +1043,7 @@ export default function Home() {
           <span className="brand-mark">V</span>
           <div><strong>Vía Clara</strong><small>Tu ruta, a tu manera</small></div>
         </header>
-        <button className="locate" onClick={locateMe} aria-label="Usar mi ubicación GPS" title="Usar mi ubicación GPS">◎</button>
+        <button className="locate icon-button" onClick={locateMe} aria-label="Usar mi ubicación GPS" title="Usar mi ubicación GPS"><LocateFixed /></button>
         {started && activeRoute && (
           <div className="navigation-banner">
             <span className="turn-arrow">↱</span>
@@ -1025,23 +1054,23 @@ export default function Home() {
             </div>
             <span className="nav-speed">{speed}<small>km/h</small></span>
             <div className="nav-actions">
-              <button className="report-nav" onClick={() => setShowReport(true)} aria-label="Comunicar incidencia">⚠</button>
-              <button onClick={() => void shareTrip()} aria-label="Compartir viaje">↗</button>
-              <button onClick={() => { setMuted((value) => !value); window.speechSynthesis?.cancel(); }} aria-label={muted ? "Activar voz" : "Silenciar voz"}>{muted ? "🔇" : "🔊"}</button>
-              <button onClick={() => setDarkMode((value) => !value)} aria-label="Cambiar modo de color">{darkMode ? "☀" : "☾"}</button>
-              <button className="exit-nav" onClick={stopNavigation}>Salir</button>
+              <button className="report-nav icon-button" onClick={() => setShowReport(true)} aria-label="Comunicar incidencia"><TriangleAlert /></button>
+              <button className="icon-button" onClick={() => void shareTrip()} aria-label="Compartir viaje"><Share2 /></button>
+              <button className="icon-button" onClick={() => { setMuted((value) => !value); window.speechSynthesis?.cancel(); }} aria-label={muted ? "Activar voz" : "Silenciar voz"}>{muted ? <VolumeX /> : <Volume2 />}</button>
+              <button className="icon-button" onClick={() => setDarkMode((value) => !value)} aria-label="Cambiar modo de color">{darkMode ? <Sun /> : <Moon />}</button>
+              <button className="exit-nav" onClick={stopNavigation}><LogOut /> Salir</button>
             </div>
           </div>
         )}
         {started && (
           <section className="safety-card navigation-safety-card">
             <button className="safety-heading" onClick={() => void focusSafetyAlerts()} title="Mostrar todas las alertas en el mapa">
-              <span className="safety-icon">◉</span>
+              <span className="safety-icon"><ShieldCheck /></span>
               <span><strong>Seguridad en ruta</strong><small>Radares y avisos cercanos</small></span>
             </button>
             <div className="safety-card-actions">
-              <button onClick={() => void loadSafetyAlerts()}>Actualizar</button>
-              <button className="report-button" onClick={() => setShowReport(true)}>＋ Comunicar</button>
+              <button onClick={() => void loadSafetyAlerts()}><RefreshCw /> Actualizar</button>
+              <button className="report-button" onClick={() => setShowReport(true)}><CirclePlus /> Comunicar</button>
             </div>
             <p><b>{roadAlerts.length}</b> alertas visibles · DGT, radares de OpenStreetMap y avisos compartidos de Vía Clara.</p>
           </section>
@@ -1096,16 +1125,16 @@ export default function Home() {
           <h1>Llega bien,<br />no solo rápido.</h1>
           <p>Busca un destino y permite tu ubicación para calcular el viaje desde donde estás.</p>
           <div className="top-actions">
-            <button className="install-button" onClick={installApp}><span>＋</span> Instalar Vía Clara</button>
+            <button className="install-button" onClick={installApp}><Download /> Instalar Vía Clara</button>
             <button className={`account-button ${session ? "connected" : ""}`} onClick={() => setAccountOpen(true)}>
-              <span>{session ? "✓" : "♙"}</span>{session ? "Cuenta sincronizada" : "Mi cuenta"}
+              {session ? <Cloud /> : <LogIn />}{session ? "Cuenta sincronizada" : "Mi cuenta"}
             </button>
           </div>
           {(savedPlaces.length > 0 || recentPlaces.length > 0) && (
             <div className="quick-places">
               {savedPlaces.slice(0, 3).map((place) => (
                 <button key={`${place.kind}-${place.label}`} onClick={() => choosePlace(place)}>
-                  <span>{place.kind === "Casa" ? "⌂" : place.kind === "Trabajo" ? "▣" : "★"}</span>{place.kind}
+                  <span>{place.kind === "Casa" ? <HomeIcon /> : place.kind === "Trabajo" ? <BriefcaseBusiness /> : <Star />}</span>{place.kind}
                 </button>
               ))}
               {recentPlaces.slice(0, 2).map((place) => (
@@ -1142,7 +1171,7 @@ export default function Home() {
         )}
 
         <div className="search-box">
-          <span className="search-icon">⌕</span>
+          <span className="search-icon"><Search /></span>
           <input
             value={destination}
             onChange={(event) => {
@@ -1153,7 +1182,7 @@ export default function Home() {
             aria-label="Destino"
             autoComplete="off"
           />
-          {destination && <button onClick={() => { setDestination(""); setDestinationPoint(null); setSuggestions([]); }}>×</button>}
+          {destination && <button className="icon-button" onClick={() => { setDestination(""); setDestinationPoint(null); setSuggestions([]); }} aria-label="Borrar destino"><X /></button>}
           {suggestions.length > 0 && (
             <div className="suggestions">
               {suggestions.map((place) => (
@@ -1166,29 +1195,29 @@ export default function Home() {
           )}
         </div>
 
-        <button className="gps-button" onClick={locateMe}><span>◎</span> Usar mi ubicación actual</button>
+        <button className="gps-button" onClick={locateMe}><LocateFixed /> Usar mi ubicación actual</button>
         <div className="status-line"><span className={loading ? "pulse" : ""} />{status}</div>
 
         <button className="tools-toggle" onClick={() => setShowTools((value) => !value)}>
-          <span>✦</span> Herramientas de viaje <b>{showTools ? "−" : "+"}</b>
+          <SlidersHorizontal /> Herramientas de viaje <b>{showTools ? "−" : "+"}</b>
         </button>
         {showTools && (
           <section className="travel-tools">
             <div className="tool-block">
               <strong>Guardar destino</strong>
               <div className="mini-actions">
-                <button onClick={() => saveCurrentPlace("Casa")}>⌂ Casa</button>
-                <button onClick={() => saveCurrentPlace("Trabajo")}>▣ Trabajo</button>
-                <button onClick={() => saveCurrentPlace("Favorito")}>★ Favorito</button>
+                <button onClick={() => saveCurrentPlace("Casa")}><HomeIcon /> Casa</button>
+                <button onClick={() => saveCurrentPlace("Trabajo")}><BriefcaseBusiness /> Trabajo</button>
+                <button onClick={() => saveCurrentPlace("Favorito")}><Star /> Favorito</button>
               </div>
             </div>
             <div className="tool-block">
               <strong>Explorar cerca</strong>
               <div className="mini-actions">
-                <button onClick={() => void findNearby("fuel")}>⛽ Gasolineras</button>
-                <button onClick={() => void findNearby("parking")}>P Aparcar</button>
-                <button onClick={() => void findNearby("charging_station")}>⚡ Cargadores</button>
-                <button onClick={() => void findNearby("restaurant")}>● Comer</button>
+                <button onClick={() => void findNearby("fuel")}><Fuel /> Gasolineras</button>
+                <button onClick={() => void findNearby("parking")}><SquareParking /> Aparcar</button>
+                <button onClick={() => void findNearby("charging_station")}><Zap /> Cargadores</button>
+                <button onClick={() => void findNearby("restaurant")}><Utensils /> Comer</button>
               </div>
               {nearbyPlaces.length > 0 && (
                 <div className="nearby-list">
@@ -1246,7 +1275,7 @@ export default function Home() {
                 <div><small>ZONA DE BAJAS EMISIONES</small><strong>{zbeWarning ? `Revisa las restricciones de ${zbeDestination}` : `Etiqueta ${environmentalBadge}: comprueba las normas locales`}</strong></div>
               </div>
             )}
-            <button className="share-trip" onClick={() => void shareTrip()}>↗ Compartir estado del viaje</button>
+            <button className="share-trip" onClick={() => void shareTrip()}><Share2 /> Compartir estado del viaje</button>
           </section>
         )}
 
@@ -1267,7 +1296,7 @@ export default function Home() {
               : null;
             return (
               <button key={key} className={`route-card ${selected === key ? "active" : ""}`} onClick={() => setSelected(key)}>
-                <span className={`route-icon ${key}`}>{key === "calm" ? "♧" : key === "fast" ? "➜" : "◒"}</span>
+                <span className={`route-icon ${key}`}>{key === "calm" ? <Check /> : key === "fast" ? <Navigation /> : <Leaf />}</span>
                 <span className="route-copy"><strong>{details.label}</strong><small>{details.note}</small></span>
                 <span className="route-time">
                   <strong>{candidate ? formatDuration(candidate.duration) : "—"}</strong>
@@ -1283,7 +1312,7 @@ export default function Home() {
           <span><small>Llegada estimada</small><strong>{activeRoute ? arrivalTime(activeRoute.duration) : "—"}</strong></span>
         </div>
         <button className={`start-button ${started ? "stop" : ""}`} disabled={!activeRoute} onClick={started ? stopNavigation : startNavigation}>
-          {started ? "Detener navegación" : activeRoute ? "Iniciar en Vía Clara" : "Primero elige un destino"} <span>{started ? "■" : "→"}</span>
+          {started ? "Detener navegación" : activeRoute ? "Iniciar en Vía Clara" : "Primero elige un destino"} <span>{started ? <X /> : <Navigation />}</span>
         </button>
         <p className="demo-note">Navegación propia con OpenStreetMap · Mantén la pantalla activa</p>
       </aside>

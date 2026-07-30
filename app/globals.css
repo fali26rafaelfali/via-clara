@@ -5,6 +5,8 @@
   --green: #176b4a;
   --mint: #d9f1e5;
   --paper: #faf8f2;
+  --clay: #c86442;
+  --button-shadow: 0 5px 14px #35291f14, inset 0 1px 0 #ffffffaa;
 }
 
 * { box-sizing: border-box; }
@@ -19,8 +21,11 @@ body {
 }
 body.navigation-active { overflow: hidden; }
 button, input { font: inherit; }
-button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
-button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #40a47766; outline-offset: 2px; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background-color .18s ease; }
+button:not(:disabled):active { transform: translateY(1px) scale(.985); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #d7896d55; outline-offset: 2px; }
+button svg { width: 18px; height: 18px; flex: 0 0 auto; stroke-width: 2; }
+.icon-button { display: inline-grid; place-items: center; }
 
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(390px, .65fr); }
 .map-wrap { position: relative; min-height: 100vh; overflow: hidden; background: #e8e8df; }
@@ -61,20 +66,22 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .brand strong, .brand small { display: block; }
 .brand strong { font: 750 17px "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: -.02em; }
 .brand small { color: #6b746e; margin-top: 2px; font-size: 11px; }
-.locate { position: absolute; bottom: 30px; right: 30px; width: 46px; height: 46px; border: 0; border-radius: 50%; color: var(--green); background: white; box-shadow: 0 7px 22px #0002; font-size: 24px; }
+.locate { position: absolute; bottom: 30px; right: 30px; width: 48px; height: 48px; border: 1px solid #ded7ca; border-radius: 16px; color: var(--clay); background: #fffdfa; box-shadow: 0 8px 24px #372a1d26; }
+.locate:hover { transform: translateY(-2px); box-shadow: 0 12px 28px #372a1d2b; }
 .navigation-banner { position: absolute; z-index: 5; left: 50%; top: 28px; transform: translateX(-50%); min-width: 340px; display: flex; align-items: center; gap: 16px; padding: 14px 15px; border-radius: 17px; color: white; background: #173f30; box-shadow: 0 12px 32px #183e2c40; }
 .navigation-banner .turn-arrow { font-size: 30px; }
 .navigation-banner small, .navigation-banner strong { display: block; }
 .navigation-banner small { color: #c3dbd0; margin-bottom: 2px; font-size: 12px; }
 .navigation-banner strong { font-size: 16px; line-height: 1.25; }
-.navigation-banner button { margin-left: auto; padding: 8px 10px; border: 0; border-radius: 9px; color: #173f30; background: white; font-weight: 700; }
+.navigation-banner button { margin-left: auto; padding: 8px 10px; border: 1px solid #ffffff3b; border-radius: 11px; color: #173f30; background: #fffdfa; font-weight: 700; box-shadow: 0 3px 9px #07130d25; }
 .nav-speed { min-width: 44px; padding-left: 12px; border-left: 1px solid #ffffff38; text-align: center; font-size: 18px; font-weight: 800; }
 .nav-speed small { display: block; color: #c3dbd0; font-size: 8px; font-weight: 500; }
 .nav-instruction { min-width: 0; flex: 1; }
 .nav-meta { display: block; margin-top: 5px; color: #c3dbd0; font-size: 11px; }
 .nav-actions { display: flex; gap: 5px; align-items: center; }
 .nav-actions button { min-width: 34px; margin-left: 0; padding: 8px; }
-.nav-actions .exit-nav { padding-inline: 10px; }
+.nav-actions .exit-nav { display: inline-flex; align-items: center; gap: 5px; padding-inline: 10px; color: white; background: #bc5c3d; border-color: #d67e61; }
+.nav-actions .exit-nav svg { width: 15px; height: 15px; }
 .road-alert-marker { width: 31px; height: 31px; display: grid; place-items: center; border: 3px solid white; border-radius: 50% 50% 50% 8px; color: white; box-shadow: 0 4px 13px #0005; font-weight: 900; transform: rotate(-45deg); }
 .road-alert-marker::first-letter { transform: rotate(45deg); }
 .safety-legend { position: absolute; z-index: 4; left: 25px; bottom: 25px; display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 13px; background: #fffefaed; box-shadow: 0 7px 22px #0002; backdrop-filter: blur(12px); }
@@ -113,9 +120,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 h1 { margin: 11px 0 14px; font: 720 clamp(38px, 3.8vw, 56px)/1.02 "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: -.052em; }
 .panel-heading p { max-width: 410px; margin: 0 0 28px; color: #5f6b64; font-size: 15px; line-height: 1.55; }
 .top-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: -15px 0 21px; }
-.install-button { min-height: 42px; display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border: 1px solid #b9c8be; border-radius: 12px; color: var(--green); background: #fff; font-size: 13px; font-weight: 750; box-shadow: 0 5px 14px #1c32230a; }
+.install-button { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 10px 15px; border: 1px solid #d5cbbd; border-radius: 13px; color: #82452f; background: #fffaf3; font-size: 13px; font-weight: 750; box-shadow: var(--button-shadow); }
 .install-button span { font-size: 17px; line-height: 1; }
-.account-button { min-height: 42px; display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border: 1px solid #d5d9d6; border-radius: 12px; color: #4f5e55; background: #f5f7f5; font-size: 13px; font-weight: 750; }
+.install-button:hover, .account-button:hover { transform: translateY(-2px); border-color: #c5a996; box-shadow: 0 9px 20px #4931221b; }
+.account-button { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 10px 15px; border: 1px solid #dad4ca; border-radius: 13px; color: #4f5e55; background: #f7f5f0; font-size: 13px; font-weight: 750; box-shadow: var(--button-shadow); }
 .account-button.connected { color: var(--green); border-color: #afcdbb; background: #edf7f1; }
 .account-sheet { position: fixed; z-index: 110; inset: 0; display: grid; place-items: center; padding: 18px; background: #10201980; backdrop-filter: blur(7px); }
 .account-card { position: relative; width: min(430px, 100%); padding: 25px; border-radius: 22px; background: var(--paper); box-shadow: 0 24px 70px #0005; }
@@ -140,7 +148,8 @@ h1 { margin: 11px 0 14px; font: 720 clamp(38px, 3.8vw, 56px)/1.02 "Segoe UI Vari
 .suggestions button:hover { background: #eff5f1; }
 .suggestions strong, .suggestions small { display: block; }
 .suggestions small { margin-top: 3px; color: #747d77; }
-.gps-button { min-height: 44px; display: flex; align-items: center; gap: 9px; margin: 10px 0 0; padding: 8px 3px; border: 0; color: var(--green); background: transparent; font-size: 14px; font-weight: 750; }
+.gps-button { min-height: 44px; display: flex; align-items: center; gap: 9px; margin: 10px 0 0; padding: 8px 10px; border: 0; border-radius: 11px; color: var(--green); background: transparent; font-size: 14px; font-weight: 750; }
+.gps-button:hover { background: #eef4ef; }
 .gps-button span { font-size: 20px; }
 .status-line { display: flex; align-items: center; gap: 7px; min-height: 22px; color: #6e7972; font-size: 12px; }
 .status-line > span { width: 7px; height: 7px; border-radius: 50%; background: #8caaa0; }
@@ -148,8 +157,11 @@ h1 { margin: 11px 0 14px; font: 720 clamp(38px, 3.8vw, 56px)/1.02 "Segoe UI Vari
 @keyframes pulse { 50% { opacity: .25; transform: scale(.75); } }
 .quick-places { display: flex; flex-wrap: wrap; gap: 6px; margin: -10px 0 18px; }
 .quick-places button,
-.mini-actions button { min-height: 40px; padding: 8px 12px; border: 1px solid #cbd4ce; border-radius: 999px; color: var(--green); background: #fff; font-size: 12px; font-weight: 750; }
-.tools-toggle { min-height: 46px; width: 100%; display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 11px 14px; border: 1px solid #ced5d0; border-radius: 14px; color: var(--ink); background: #fff; text-align: left; font-size: 13px; font-weight: 700; box-shadow: 0 5px 15px #1c322308; }
+.mini-actions button { min-height: 42px; display: inline-flex; align-items: center; gap: 7px; padding: 9px 13px; border: 1px solid #d8d0c4; border-radius: 13px; color: #594f46; background: #fffdfa; font-size: 12px; font-weight: 750; box-shadow: 0 3px 10px #32261b0d; }
+.quick-places button:hover, .mini-actions button:hover { color: #914d35; border-color: #cda995; background: #fff7ee; transform: translateY(-1px); }
+.mini-actions button svg, .quick-places button svg { width: 16px; height: 16px; color: var(--clay); }
+.tools-toggle { min-height: 48px; width: 100%; display: flex; align-items: center; gap: 9px; margin-top: 10px; padding: 12px 15px; border: 1px solid #d7d0c6; border-radius: 14px; color: var(--ink); background: #fffdfa; text-align: left; font-size: 13px; font-weight: 700; box-shadow: var(--button-shadow); }
+.tools-toggle:hover { border-color: #c4aa98; background: #fff8f0; transform: translateY(-1px); }
 .tools-toggle b { margin-left: auto; color: var(--green); }
 .travel-tools { max-height: 380px; overflow: auto; margin-top: 8px; padding: 14px; border: 1px solid #d5dad6; border-radius: 16px; background: #fff; box-shadow: 0 8px 24px #1c32230a; }
 .tool-block + .tool-block { margin-top: 12px; }
@@ -183,8 +195,9 @@ h1 { margin: 11px 0 14px; font: 720 clamp(38px, 3.8vw, 56px)/1.02 "Segoe UI Vari
 .safety-card small { margin-top: 2px; color: #69746d; font-size: 11px; }
 .safety-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 10px; color: white; background: #be3c32; font-size: 17px; }
 .safety-card-actions { display: flex; gap: 6px; margin-top: 9px; }
-.safety-card-actions button { min-height: 42px; flex: 1; padding: 8px; border: 1px solid #c6d0c9; border-radius: 10px; color: var(--green); background: white; font-size: 12px; font-weight: 800; }
-.safety-card-actions .report-button { color: white; background: #be3c32; border-color: #be3c32; }
+.safety-card-actions button { min-height: 44px; flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px; border: 1px solid #d7d0c5; border-radius: 12px; color: #4d5e53; background: #fffdfa; font-size: 12px; font-weight: 800; box-shadow: var(--button-shadow); }
+.safety-card-actions button:hover { transform: translateY(-1px); border-color: #c8ac98; }
+.safety-card-actions .report-button { color: white; background: linear-gradient(135deg, #cb6848, #a94d35); border-color: #a94d35; box-shadow: 0 7px 16px #a94d3533; }
 .safety-card p { margin: 9px 0 0; color: #69746d; font-size: 10px; line-height: 1.45; }
 .navigation-safety-card { position: fixed; z-index: 55; left: 18px; bottom: 18px; width: min(350px, calc(100vw - 90px)); margin: 0; background: #fffefaef; box-shadow: 0 12px 35px #10201930; backdrop-filter: blur(14px); }
 .journey-assistant { display: grid; gap: 7px; margin-top: 10px; padding: 10px; border: 1px solid #d7ded9; border-radius: 16px; background: #fff; box-shadow: 0 7px 20px #1c32230a; }
@@ -197,7 +210,7 @@ h1 { margin: 11px 0 14px; font: 720 clamp(38px, 3.8vw, 56px)/1.02 "Segoe UI Vari
 .journey-signal.danger { background: #f9e6e2; }
 .journey-signal.rest { background: #eef1fa; }
 .journey-signal button { min-height: 34px; padding: 6px 9px; border: 0; border-radius: 9px; color: white; background: var(--green); font-size: 10px; font-weight: 800; }
-.share-trip { min-height: 42px; border: 1px solid #bfd0c5; border-radius: 11px; color: var(--green); background: white; font-size: 12px; font-weight: 800; }
+.share-trip { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid #d7d0c6; border-radius: 12px; color: #5a5149; background: #fffdfa; font-size: 12px; font-weight: 800; box-shadow: var(--button-shadow); }
 .route-title { display: flex; justify-content: space-between; margin: 26px 0 12px; font-size: 13px; }
 .route-title span { color: #b46543; }
 .route-options { display: grid; gap: 9px; }
@@ -218,8 +231,8 @@ h1 { margin: 11px 0 14px; font: 720 clamp(38px, 3.8vw, 56px)/1.02 "Segoe UI Vari
 .summary small, .summary strong { display: block; }
 .summary small { color: #7b837e; font-size: 11px; margin-bottom: 3px; }
 .summary strong { font: 750 16px "Segoe UI Variable Display", "Segoe UI", sans-serif; }
-.start-button { min-height: 58px; display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 17px 20px; border: 0; border-radius: 16px; color: white; background: linear-gradient(135deg, #1a7652, #11583e); font-size: 15px; font-weight: 800; box-shadow: 0 12px 28px #176b4a42; transition: .2s ease; }
-.start-button:hover { background: #10583c; transform: translateY(-1px); }
+.start-button { min-height: 60px; display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 17px 20px; border: 1px solid #0c5539; border-radius: 17px; color: white; background: linear-gradient(135deg, #207a58, #10563d); font-size: 15px; font-weight: 800; box-shadow: 0 12px 26px #176b4a35, inset 0 1px 0 #ffffff33; transition: .2s ease; }
+.start-button:hover { background: linear-gradient(135deg, #268463, #125b41); transform: translateY(-2px); box-shadow: 0 15px 30px #176b4a3d; }
 .start-button:disabled { cursor: not-allowed; color: #8a938e; background: #d8ddd9; box-shadow: none; transform: none; }
 .start-button.stop { background: #a84b38; box-shadow: 0 10px 25px #a84b3833; }
 .start-button span { font-size: 20px; }
