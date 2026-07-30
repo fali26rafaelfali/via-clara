@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AttributionControl,
-  GeoJSONSource,
   LngLatBounds,
   LngLatBoundsLike,
   Map as MapLibreMap,
@@ -84,7 +83,6 @@ type RouteResult = {
 type SharedTrip = { latitude: number; longitude: number; destination: string; eta: string; status: "driving" | "stopped" | "arrived" | "sos"; updated_at: string };
 
 const MADRID: Coordinates = [-3.7038, 40.4168];
-const NAVIGATION_BLUE = "#1677ff";
 const SUPABASE_URL = "https://vbzhxoanlqpqwxfidgao.supabase.co";
 const SUPABASE_KEY = "sb_publishable_dXBO8BiyoQkEVlqldNDesQ_HPoeQ0yn";
 const ZBE_CITIES = ["madrid", "barcelona", "sevilla", "málaga", "granada", "bilbao", "valladolid", "alicante", "oviedo", "pamplona", "salamanca", "vitoria", "tarragona", "girona", "castellón"];
@@ -467,6 +465,34 @@ export default function Home() {
     return [...routes].sort((a, b) => b.duration - a.duration)[0];
   })();
 
+  function drawRouteOnMap(route: RouteResult, navigationMode = false) {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    if (map.getLayer("route")) map.removeLayer("route");
+    if (map.getLayer("route-casing")) map.removeLayer("route-casing");
+    if (map.getSource("route")) map.removeSource("route");
+    const data: GeoJSON.Feature<GeoJSON.LineString> = {
+      type: "Feature",
+      properties: {},
+      geometry: route.geometry,
+    };
+    map.addSource("route", { type: "geojson", data });
+    map.addLayer({
+      id: "route-casing",
+      type: "line",
+      source: "route",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#ffffff", "line-width": navigationMode ? 18 : 14, "line-opacity": 1 },
+    });
+    map.addLayer({
+      id: "route",
+      type: "line",
+      source: "route",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#0969ff", "line-width": navigationMode ? 12 : 9, "line-opacity": 1 },
+    });
+  }
+
   useEffect(() => {
     if (!activeRoute) {
       setRouteWeather(null);
@@ -495,41 +521,7 @@ export default function Home() {
     const map = mapRef.current;
     if (!map || !activeRoute) return;
     const updateRoute = () => {
-      const source = map.getSource("route") as GeoJSONSource | undefined;
-      const data: GeoJSON.Feature<GeoJSON.LineString> = {
-        type: "Feature",
-        properties: {},
-        geometry: activeRoute.geometry,
-      };
-      if (source) {
-        source.setData(data);
-        map.setPaintProperty("route", "line-color", NAVIGATION_BLUE);
-        if (!map.getLayer("route-casing")) {
-          map.addLayer({
-            id: "route-casing",
-            type: "line",
-            source: "route",
-            layout: { "line-cap": "round", "line-join": "round" },
-            paint: { "line-color": "#ffffff", "line-width": 13, "line-opacity": 0.9 },
-          }, "route");
-        }
-      } else {
-        map.addSource("route", { type: "geojson", data });
-        map.addLayer({
-          id: "route-casing",
-          type: "line",
-          source: "route",
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#ffffff", "line-width": 13, "line-opacity": 0.9 },
-        });
-        map.addLayer({
-          id: "route",
-          type: "line",
-          source: "route",
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": NAVIGATION_BLUE, "line-width": 8, "line-opacity": 0.96 },
-        });
-      }
+      drawRouteOnMap(activeRoute, started);
       const coords = activeRoute.geometry.coordinates as Coordinates[];
       const bounds = coords.reduce(
         (box, coordinate) => box.extend(coordinate),
@@ -539,7 +531,7 @@ export default function Home() {
     };
     if (map.isStyleLoaded()) updateRoute();
     else map.once("load", updateRoute);
-  }, [activeRoute, selected]);
+  }, [activeRoute, selected, started]);
 
   async function calculateRoutes(point: Coordinates, from: Coordinates = origin) {
     setLoading(true);
@@ -898,15 +890,7 @@ export default function Home() {
     const steps = activeRoute.legs.flatMap((leg) => leg.steps);
     const routeCoordinates = activeRoute.geometry.coordinates as Coordinates[];
     const map = mapRef.current;
-    if (map?.getLayer("route")) {
-      map.setPaintProperty("route", "line-color", "#0969ff");
-      map.setPaintProperty("route", "line-width", 11);
-      map.setPaintProperty("route", "line-opacity", 1);
-    }
-    if (map?.getLayer("route-casing")) {
-      map.setPaintProperty("route-casing", "line-width", 17);
-      map.setPaintProperty("route-casing", "line-opacity", 0.96);
-    }
+    drawRouteOnMap(activeRoute, true);
     originMarker.current?.getElement().style.setProperty("display", "none");
     navigationMarker.current?.remove();
     const arrow = document.createElement("div");
