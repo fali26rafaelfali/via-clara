@@ -151,6 +151,27 @@ function distanceBetween(a: Coordinates, b: Coordinates) {
   return 6371000 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 }
 
+function distanceToRoute(point: Coordinates, route: Coordinates[]) {
+  if (!route.length) return Number.POSITIVE_INFINITY;
+  const metresPerDegreeLat = 111320;
+  const metresPerDegreeLon = Math.cos((point[1] * Math.PI) / 180) * metresPerDegreeLat;
+  let nearest = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < route.length; index += 1) {
+    const startX = (route[index - 1][0] - point[0]) * metresPerDegreeLon;
+    const startY = (route[index - 1][1] - point[1]) * metresPerDegreeLat;
+    const endX = (route[index][0] - point[0]) * metresPerDegreeLon;
+    const endY = (route[index][1] - point[1]) * metresPerDegreeLat;
+    const segmentX = endX - startX;
+    const segmentY = endY - startY;
+    const segmentLengthSquared = segmentX ** 2 + segmentY ** 2;
+    const progress = segmentLengthSquared
+      ? Math.max(0, Math.min(1, -(startX * segmentX + startY * segmentY) / segmentLengthSquared))
+      : 0;
+    nearest = Math.min(nearest, Math.hypot(startX + progress * segmentX, startY + progress * segmentY));
+  }
+  return nearest;
+}
+
 function deviceId() {
   let id = localStorage.getItem("via-clara-device-id");
   if (!id) {
@@ -491,6 +512,11 @@ export default function Home() {
   }, [activeRoute, started]);
 
   useEffect(() => {
+    if (!activeRoute) return;
+    void loadSafetyAlerts(origin, activeRoute.geometry.coordinates as Coordinates[]);
+  }, [activeRoute]);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || !activeRoute) return;
     const updateRoute = () => {
@@ -730,7 +756,10 @@ export default function Home() {
     }
   }
 
-  async function loadSafetyAlerts(point: Coordinates = origin) {
+  async function loadSafetyAlerts(
+    point: Coordinates = origin,
+    routeCoordinates: Coordinates[] | undefined = activeRoute?.geometry.coordinates as Coordinates[] | undefined,
+  ) {
     setStatus("Actualizando alertas de seguridad…");
     try {
       const query = `[out:json][timeout:15];nwr(around:15000,${point[1]},${point[0]})[highway=speed_camera];out center;`;
@@ -756,9 +785,11 @@ export default function Home() {
         confirmations: 0,
         source: "OpenStreetMap",
       })).filter((item: RoadAlert) => Number.isFinite(item.coordinates[0]));
+      const isOnSelectedRoute = (alert: RoadAlert) => routeCoordinates?.length
+        ? distanceToRoute(alert.coordinates, routeCoordinates) <= 8000
+        : distanceBetween(point, alert.coordinates) < 100000;
       const official: RoadAlert[] = (dgtData.incidents ?? [])
-        .filter((alert: RoadAlert) => distanceBetween(point, alert.coordinates) < 100000)
-        .slice(0, 250);
+        .filter(isOnSelectedRoute);
       const shared: RoadAlert[] = sharedData.map((item: { id: string; kind: AlertKind; latitude: number; longitude: number; created_at: string; confirmations: number }) => ({
         id: `shared-${item.id}`,
         kind: item.kind,
@@ -771,7 +802,7 @@ export default function Home() {
       const combined = [...community, ...shared, ...official, ...cameras];
       setRoadAlerts(combined);
       localStorage.setItem("via-clara-alerts", JSON.stringify(community));
-      setStatus(`${official.length} DGT · ${cameras.length} radares · ${shared.length} avisos compartidos`);
+      setStatus(`${official.length} alertas DGT en tu ruta · ${cameras.length} radares · ${shared.length} avisos compartidos`);
       return combined;
     } catch {
       setStatus("No se pudieron actualizar ahora las alertas");
