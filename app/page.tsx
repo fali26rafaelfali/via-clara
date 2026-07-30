@@ -33,6 +33,10 @@ type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
+type ScreenWakeLock = {
+  release: () => Promise<void>;
+  addEventListener?: (type: "release", listener: () => void) => void;
+};
 type RouteStep = {
   distance: number;
   duration: number;
@@ -152,8 +156,10 @@ export default function Home() {
   const destinationMarker = useRef<Marker | null>(null);
   const watchId = useRef<number | null>(null);
   const lastSpokenStep = useRef(-1);
+  const navigationStepFloor = useRef(0);
+  const lastVoiceAt = useRef(0);
   const lastRecalculation = useRef(0);
-  const wakeLock = useRef<{ release: () => Promise<void> } | null>(null);
+  const wakeLock = useRef<ScreenWakeLock | null>(null);
   const alertMarkers = useRef<Marker[]>([]);
   const warnedAlerts = useRef<Set<string>>(new Set());
   const roadAlertsRef = useRef<RoadAlert[]>([]);
@@ -221,6 +227,20 @@ export default function Home() {
   useEffect(() => {
     roadAlertsRef.current = roadAlerts;
   }, [roadAlerts]);
+
+  useEffect(() => {
+    if (!started) return;
+    const resumeScreenLock = () => {
+      if (document.visibilityState === "visible") void keepScreenAwake();
+    };
+    document.addEventListener("visibilitychange", resumeScreenLock);
+    window.addEventListener("pageshow", resumeScreenLock);
+    void keepScreenAwake();
+    return () => {
+      document.removeEventListener("visibilitychange", resumeScreenLock);
+      window.removeEventListener("pageshow", resumeScreenLock);
+    };
+  }, [started]);
 
   useEffect(() => {
     try {
@@ -678,6 +698,8 @@ export default function Home() {
     setRemainingDistance(activeRoute.distance);
     setRemainingDuration(activeRoute.duration);
     lastSpokenStep.current = -1;
+    navigationStepFloor.current = 0;
+    lastVoiceAt.current = 0;
     warnedAlerts.current.clear();
     navigationStartedAt.current = Date.now();
     restReminderSpoken.current = false;
@@ -689,11 +711,7 @@ export default function Home() {
     setStatus("Navegación activa · cargando alertas de seguridad");
     const steps = activeRoute.legs.flatMap((leg) => leg.steps);
     const routeCoordinates = activeRoute.geometry.coordinates as Coordinates[];
-    if ("wakeLock" in navigator) {
-      void navigator.wakeLock.request("screen").then((lock) => {
-        wakeLock.current = lock;
-      }).catch(() => setStatus("Navegación activa · evita apagar la pantalla"));
-    }
+    void keepScreenAwake();
     watchId.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
         const point: Coordinates = [coords.longitude, coords.latitude];
@@ -718,7 +736,9 @@ export default function Home() {
             closestIndex = index;
           }
         });
-        const nextIndex = closestDistance < 35 ? Math.min(closestIndex + 1, steps.length - 1) : closestIndex;
+        const detectedIndex = closestDistance < 35 ? Math.min(closestIndex + 1, steps.length - 1) : closestIndex;
+        const nextIndex = Math.max(navigationStepFloor.current, detectedIndex);
+        navigationStepFloor.current = nextIndex;
         const nextStep = steps[nextIndex];
         const nextDistance = nextStep ? distanceBetween(point, nextStep.maneuver.location) : 0;
         setCurrentStepIndex(nextIndex);
@@ -760,11 +780,13 @@ export default function Home() {
           nextIndex !== lastSpokenStep.current &&
           nextStep &&
           nextDistance < 450 &&
+          Date.now() - lastVoiceAt.current > 8000 &&
           !muted &&
           "speechSynthesis" in window &&
           "SpeechSynthesisUtterance" in window
         ) {
           lastSpokenStep.current = nextIndex;
+          lastVoiceAt.current = Date.now();
           window.speechSynthesis?.cancel();
           const message = new SpeechSynthesisUtterance(
             `En ${Math.max(10, Math.round(nextDistance / 10) * 10)} metros, ${instructionFor(nextStep)}`,
@@ -794,6 +816,20 @@ export default function Home() {
       },
       { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 },
     );
+  }
+
+  async function keepScreenAwake() {
+    if (!("wakeLock" in navigator) || document.visibilityState !== "visible" || wakeLock.current) return;
+    try {
+      const lock = await navigator.wakeLock.request("screen");
+      wakeLock.current = lock;
+      lock.addEventListener?.("release", () => {
+        if (wakeLock.current === lock) wakeLock.current = null;
+      });
+    } catch {
+      wakeLock.current = null;
+      setStatus("Navegación activa · revisa el ahorro de batería si la pantalla se apaga");
+    }
   }
 
   function stopNavigation() {
