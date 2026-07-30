@@ -3,6 +3,8 @@ name: Publicar Vía Clara
 on:
   push:
     branches: ["main"]
+  schedule:
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -29,6 +31,9 @@ jobs:
 
       - name: Instalar dependencias
         run: npm ci
+
+      - name: Actualizar alertas DGT
+        run: node scripts/update-dgt.mjs
 
       - name: Construir web
         run: npm run build:pages
