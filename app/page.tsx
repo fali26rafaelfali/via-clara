@@ -85,6 +85,7 @@ type SharedTrip = { latitude: number; longitude: number; destination: string; et
 const MADRID: Coordinates = [-3.7038, 40.4168];
 const SUPABASE_URL = "https://vbzhxoanlqpqwxfidgao.supabase.co";
 const SUPABASE_KEY = "sb_publishable_dXBO8BiyoQkEVlqldNDesQ_HPoeQ0yn";
+const ROUTE_ALERT_CORRIDOR_METRES = 750;
 const ZBE_CITIES = ["madrid", "barcelona", "sevilla", "málaga", "granada", "bilbao", "valladolid", "alicante", "oviedo", "pamplona", "salamanca", "vitoria", "tarragona", "girona", "castellón"];
 const ALERT_DETAILS: Record<AlertKind, { label: string; icon: string; color: string; expires: number }> = {
   radar: { label: "Radar fijo", icon: "◉", color: "#be3c32", expires: 30 * 24 * 60 * 60 * 1000 },
@@ -786,8 +787,9 @@ export default function Home() {
         source: "OpenStreetMap",
       })).filter((item: RoadAlert) => Number.isFinite(item.coordinates[0]));
       const isOnSelectedRoute = (alert: RoadAlert) => routeCoordinates?.length
-        ? distanceToRoute(alert.coordinates, routeCoordinates) <= 8000
+        ? distanceToRoute(alert.coordinates, routeCoordinates) <= ROUTE_ALERT_CORRIDOR_METRES
         : distanceBetween(point, alert.coordinates) < 100000;
+      const routeCameras = cameras.filter(isOnSelectedRoute);
       const official: RoadAlert[] = (dgtData.incidents ?? [])
         .filter(isOnSelectedRoute);
       const shared: RoadAlert[] = sharedData.map((item: { id: string; kind: AlertKind; latitude: number; longitude: number; created_at: string; confirmations: number }) => ({
@@ -797,12 +799,14 @@ export default function Home() {
         createdAt: Date.parse(item.created_at),
         confirmations: item.confirmations,
         source: "Comunidad",
-      })).filter((alert: RoadAlert) => distanceBetween(point, alert.coordinates) < 100000);
-      const community = roadAlerts.filter((alert) => alert.id.startsWith("local-") && Date.now() - alert.createdAt < ALERT_DETAILS[alert.kind].expires);
-      const combined = [...community, ...shared, ...official, ...cameras];
+      })).filter(isOnSelectedRoute);
+      const storedCommunity: RoadAlert[] = (JSON.parse(localStorage.getItem("via-clara-alerts") ?? "[]") as RoadAlert[])
+        .filter((alert) => alert.id.startsWith("local-") && Date.now() - alert.createdAt < ALERT_DETAILS[alert.kind].expires);
+      const community = storedCommunity.filter(isOnSelectedRoute);
+      const combined = [...community, ...shared, ...official, ...routeCameras];
       setRoadAlerts(combined);
-      localStorage.setItem("via-clara-alerts", JSON.stringify(community));
-      setStatus(`${official.length} alertas DGT en tu ruta · ${cameras.length} radares · ${shared.length} avisos compartidos`);
+      localStorage.setItem("via-clara-alerts", JSON.stringify(storedCommunity));
+      setStatus(`${official.length} alertas DGT en tu ruta · ${routeCameras.length} radares · ${shared.length} avisos compartidos`);
       return combined;
     } catch {
       setStatus("No se pudieron actualizar ahora las alertas");
