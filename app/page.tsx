@@ -17,6 +17,7 @@ type RouteKind = "calm" | "fast" | "eco";
 type TravelMode = "Normal" | "Familia" | "Caravana";
 type Place = { label: string; coordinates: Coordinates };
 type SavedPlace = Place & { kind: "Casa" | "Trabajo" | "Favorito" };
+type AuthSession = { access_token: string; refresh_token: string; user: { id: string; email?: string } };
 type NearbyPlace = Place & { type: string };
 type AlertKind = "radar" | "accident" | "traffic" | "works" | "hazard" | "vehicle";
 type RoadAlert = {
@@ -201,6 +202,11 @@ export default function Home() {
   const [showReport, setShowReport] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(true);
   const [selectedAlert, setSelectedAlert] = useState<RoadAlert | null>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [accountEmail, setAccountEmail] = useState("");
+  const [accountPassword, setAccountPassword] = useState("");
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [session, setSession] = useState<AuthSession | null>(null);
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current) return;
@@ -256,6 +262,11 @@ export default function Home() {
       if (settings.environmentalBadge) setEnvironmentalBadge(settings.environmentalBadge);
       setAvoidTolls(Boolean(settings.avoidTolls));
       setAvoidHighways(Boolean(settings.avoidHighways));
+      const storedSession = localStorage.getItem("via-clara-session");
+      if (storedSession) {
+        const restored: AuthSession = JSON.parse(storedSession);
+        void restoreAccount(restored);
+      }
     } catch {
       // Keep safe defaults when local preferences are unavailable.
     }
@@ -514,7 +525,117 @@ export default function Home() {
     const updated = [place, ...savedPlaces.filter((item) => item.kind !== kind || kind === "Favorito")].slice(0, 8);
     setSavedPlaces(updated);
     localStorage.setItem("via-clara-saved", JSON.stringify(updated));
-    setStatus(`${kind} guardado en este dispositivo`);
+    if (session) void uploadSavedPlace(place, session);
+    setStatus(`${kind} guardado${session ? " y sincronizado" : " en este dispositivo"}`);
+  }
+
+  async function syncSavedPlaces(activeSession: AuthSession, localPlaces?: SavedPlace[]) {
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/saved_places?select=kind,label,longitude,latitude&order=updated_at.desc`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${activeSession.access_token}` },
+      });
+      if (!response.ok) throw new Error("sync");
+      const cloud: Array<{ kind: SavedPlace["kind"]; label: string; longitude: number; latitude: number }> = await response.json();
+      const local = localPlaces ?? JSON.parse(localStorage.getItem("via-clara-saved") ?? "[]") as SavedPlace[];
+      const remotePlaces = cloud.map((place) => ({ kind: place.kind, label: place.label, coordinates: [place.longitude, place.latitude] as Coordinates }));
+      const merged = [...remotePlaces];
+      for (const place of local) {
+        const samePrimary = place.kind !== "Favorito" && merged.some((item) => item.kind === place.kind);
+        const duplicate = merged.some((item) => item.kind === place.kind && item.label === place.label);
+        if (!samePrimary && !duplicate) merged.push(place);
+      }
+      const finalPlaces = merged.slice(0, 20);
+      setSavedPlaces(finalPlaces);
+      localStorage.setItem("via-clara-saved", JSON.stringify(finalPlaces));
+      await Promise.all(finalPlaces.map((place) => uploadSavedPlace(place, activeSession)));
+      setStatus("Casa, Trabajo y Favoritos sincronizados");
+    } catch {
+      setStatus("No se pudo sincronizar. Tus lugares siguen guardados en este móvil.");
+    }
+  }
+
+  async function restoreAccount(storedSession: AuthSession) {
+    try {
+      const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: storedSession.refresh_token }),
+      });
+      if (!response.ok) throw new Error("expired");
+      const refreshed = await response.json() as AuthSession;
+      localStorage.setItem("via-clara-session", JSON.stringify(refreshed));
+      setSession(refreshed);
+      await syncSavedPlaces(refreshed);
+    } catch {
+      localStorage.removeItem("via-clara-session");
+      setSession(null);
+    }
+  }
+
+  async function uploadSavedPlace(place: SavedPlace, activeSession: AuthSession) {
+    const headers = {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${activeSession.access_token}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates",
+    };
+    if (place.kind !== "Favorito") {
+      await fetch(`${SUPABASE_URL}/rest/v1/saved_places?kind=eq.${encodeURIComponent(place.kind)}&label=neq.${encodeURIComponent(place.label)}`, {
+        method: "DELETE",
+        headers,
+      });
+    }
+    await fetch(`${SUPABASE_URL}/rest/v1/saved_places?on_conflict=user_id,kind,label`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        user_id: activeSession.user.id,
+        kind: place.kind,
+        label: place.label,
+        longitude: place.coordinates[0],
+        latitude: place.coordinates[1],
+        updated_at: new Date().toISOString(),
+      }),
+    });
+  }
+
+  async function submitAccount(mode: "login" | "signup") {
+    if (!accountEmail.includes("@") || accountPassword.length < 6) {
+      setStatus("Escribe un correo válido y una contraseña de al menos 6 caracteres");
+      return;
+    }
+    setAccountBusy(true);
+    try {
+      const endpoint = mode === "login" ? "/auth/v1/token?grant_type=password" : "/auth/v1/signup";
+      const response = await fetch(`${SUPABASE_URL}${endpoint}`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ email: accountEmail.trim(), password: accountPassword }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.msg ?? data.error_description ?? "No se pudo acceder");
+      if (!data.access_token) {
+        setStatus("Revisa tu correo para confirmar la cuenta y después pulsa Entrar");
+        return;
+      }
+      const nextSession = data as AuthSession;
+      localStorage.setItem("via-clara-session", JSON.stringify(nextSession));
+      setSession(nextSession);
+      setAccountPassword("");
+      setAccountOpen(false);
+      await syncSavedPlaces(nextSession, savedPlaces);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "No se pudo acceder a la cuenta");
+    } finally {
+      setAccountBusy(false);
+    }
+  }
+
+  function signOut() {
+    localStorage.removeItem("via-clara-session");
+    setSession(null);
+    setAccountOpen(false);
+    setStatus("Sesión cerrada. Tus lugares continúan guardados en este móvil.");
   }
 
   async function findNearby(type: "fuel" | "parking" | "charging_station" | "restaurant") {
@@ -965,7 +1086,12 @@ export default function Home() {
           <span className="eyebrow">MAPA Y RUTAS REALES</span>
           <h1>Llega bien,<br />no solo rápido.</h1>
           <p>Busca un destino y permite tu ubicación para calcular el viaje desde donde estás.</p>
-          <button className="install-button" onClick={installApp}><span>＋</span> Instalar Vía Clara</button>
+          <div className="top-actions">
+            <button className="install-button" onClick={installApp}><span>＋</span> Instalar Vía Clara</button>
+            <button className={`account-button ${session ? "connected" : ""}`} onClick={() => setAccountOpen(true)}>
+              <span>{session ? "✓" : "♙"}</span>{session ? "Cuenta sincronizada" : "Mi cuenta"}
+            </button>
+          </div>
           {(savedPlaces.length > 0 || recentPlaces.length > 0) && (
             <div className="quick-places">
               {savedPlaces.slice(0, 3).map((place) => (
@@ -979,6 +1105,32 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {accountOpen && (
+          <div className="account-sheet" role="dialog" aria-modal="true" aria-label="Cuenta y sincronización">
+            <div className="account-card">
+              <button className="account-close" onClick={() => setAccountOpen(false)} aria-label="Cerrar">×</button>
+              <span className="eyebrow">SINCRONIZACIÓN SEGURA</span>
+              <h2>{session ? "Tu cuenta Vía Clara" : "Tus lugares en todos tus móviles"}</h2>
+              {session ? (
+                <>
+                  <p>Sesión iniciada como <strong>{session.user.email}</strong>. Casa, Trabajo y Favoritos se sincronizan automáticamente.</p>
+                  <button className="account-primary" onClick={() => void syncSavedPlaces(session, savedPlaces)}>Sincronizar ahora</button>
+                  <button className="account-secondary" onClick={signOut}>Cerrar sesión</button>
+                </>
+              ) : (
+                <>
+                  <p>Entra o crea una cuenta. Conservaremos también los lugares que ya tienes guardados en este móvil.</p>
+                  <label>Correo electrónico<input type="email" value={accountEmail} onChange={(event) => setAccountEmail(event.target.value)} placeholder="tu@email.com" autoComplete="email" /></label>
+                  <label>Contraseña<input type="password" value={accountPassword} onChange={(event) => setAccountPassword(event.target.value)} placeholder="Mínimo 6 caracteres" autoComplete="current-password" /></label>
+                  <button className="account-primary" disabled={accountBusy} onClick={() => void submitAccount("login")}>{accountBusy ? "Conectando…" : "Entrar y sincronizar"}</button>
+                  <button className="account-secondary" disabled={accountBusy} onClick={() => void submitAccount("signup")}>Crear cuenta nueva</button>
+                  <small>Tus direcciones solo serán visibles dentro de tu cuenta.</small>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="search-box">
           <span className="search-icon">⌕</span>

@@ -112,8 +112,24 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .eyebrow { color: var(--green); font-size: 12px; font-weight: 850; letter-spacing: .16em; }
 h1 { margin: 11px 0 14px; font: 720 clamp(38px, 3.8vw, 56px)/1.02 "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: -.052em; }
 .panel-heading p { max-width: 410px; margin: 0 0 28px; color: #5f6b64; font-size: 15px; line-height: 1.55; }
-.install-button { min-height: 42px; display: inline-flex; align-items: center; gap: 7px; margin: -15px 0 21px; padding: 9px 14px; border: 1px solid #b9c8be; border-radius: 12px; color: var(--green); background: #fff; font-size: 13px; font-weight: 750; box-shadow: 0 5px 14px #1c32230a; }
+.top-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: -15px 0 21px; }
+.install-button { min-height: 42px; display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border: 1px solid #b9c8be; border-radius: 12px; color: var(--green); background: #fff; font-size: 13px; font-weight: 750; box-shadow: 0 5px 14px #1c32230a; }
 .install-button span { font-size: 17px; line-height: 1; }
+.account-button { min-height: 42px; display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border: 1px solid #d5d9d6; border-radius: 12px; color: #4f5e55; background: #f5f7f5; font-size: 13px; font-weight: 750; }
+.account-button.connected { color: var(--green); border-color: #afcdbb; background: #edf7f1; }
+.account-sheet { position: fixed; z-index: 110; inset: 0; display: grid; place-items: center; padding: 18px; background: #10201980; backdrop-filter: blur(7px); }
+.account-card { position: relative; width: min(430px, 100%); padding: 25px; border-radius: 22px; background: var(--paper); box-shadow: 0 24px 70px #0005; }
+.account-close { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border: 0; border-radius: 50%; color: var(--ink); background: #e8ede9; font-size: 22px; }
+.account-card h2 { max-width: 340px; margin: 8px 0 10px; font: 720 28px/1.08 "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: -.03em; }
+.account-card p { margin: 0 0 16px; color: #647068; font-size: 14px; line-height: 1.5; }
+.account-card label { display: block; margin-top: 11px; color: #536058; font-size: 13px; font-weight: 700; }
+.account-card input { width: 100%; min-height: 48px; margin-top: 5px; padding: 10px 12px; border: 1px solid #cbd4ce; border-radius: 11px; outline: none; color: var(--ink); background: white; font-size: 16px; }
+.account-card input:focus { border-color: var(--green); box-shadow: 0 0 0 3px #176b4a15; }
+.account-primary, .account-secondary { width: 100%; min-height: 48px; margin-top: 11px; border-radius: 12px; font-size: 14px; font-weight: 800; }
+.account-primary { border: 0; color: white; background: var(--green); }
+.account-secondary { border: 1px solid #bfd0c5; color: var(--green); background: white; }
+.account-primary:disabled, .account-secondary:disabled { opacity: .55; }
+.account-card > small { display: block; margin-top: 12px; color: #78827c; text-align: center; font-size: 11px; }
 .search-box { position: relative; display: flex; align-items: center; height: 62px; border: 1px solid #c8cec9; border-radius: 16px; background: white; box-shadow: 0 8px 24px #24382912; }
 .search-box:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px #176b4a15; }
 .search-icon { padding-left: 18px; color: var(--green); font-size: 25px; }
