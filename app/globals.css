@@ -263,6 +263,7 @@ body.dark-mode .alert-votes .still-there { background: var(--green); }
 body.dark-mode .alert-detail-meta span { color: #dce7e0; background: #263b30; }
 
 @media (max-width: 820px) {
+  body { font-size: 16px; }
   .app-shell { display: flex; flex-direction: column; }
   .map-wrap { min-height: 46vh; order: 2; }
   .panel { min-height: 54vh; order: 1; padding: 28px 22px 22px; }
@@ -273,7 +274,9 @@ body.dark-mode .alert-detail-meta span { color: #dce7e0; background: #263b30; }
   .navigation-banner { top: 12px; width: calc(100% - 20px); min-width: 0; gap: 9px; padding: 13px; border-radius: 16px; }
   .navigation-banner .turn-arrow { font-size: 25px; }
   .navigation-banner .nav-instruction { min-width: 0; flex: 1; }
-  .navigation-banner strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .navigation-banner small { font-size: 13px; }
+  .navigation-banner strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; }
+  .nav-meta { font-size: 12px; }
   .nav-speed { display: none; }
   .nav-actions { gap: 3px; }
   .nav-actions button { min-width: 40px; min-height: 40px; padding: 8px 6px; }
@@ -281,12 +284,37 @@ body.dark-mode .alert-detail-meta span { color: #dce7e0; background: #263b30; }
   .tool-grid { grid-template-columns: 1fr 1fr; }
   .travel-tools { max-height: none; }
   .safety-legend { left: 12px; bottom: 12px; }
+  .brand small,
+  .status-line,
+  .quick-places button,
+  .mini-actions button,
+  .nearby-list button,
+  .preference-switches label,
+  .share-trip,
+  .route-copy small,
+  .route-time small,
+  .summary small,
+  .safety-card small,
+  .safety-card-actions button { font-size: 13px; }
+  .tool-grid label,
+  .journey-profile label,
+  .safety-note,
+  .safety-card p,
+  .alert-detail-meta span { font-size: 12px; }
+  .trip-insights small,
+  .journey-signal small,
+  .alert-detail-card > small,
+  .report-heading small,
+  .alert-detail-card .official-note,
+  .demo-note { font-size: 11px; }
+  .journey-signal strong,
+  .journey-signal button { font-size: 12px; }
 }
 
 @media (max-width: 480px) {
   .panel { padding: 24px 16px 20px; }
-  .eyebrow { font-size: 11px; }
-  .panel-heading p { font-size: 14px; }
+  .eyebrow { font-size: 12px; }
+  .panel-heading p { font-size: 15px; }
   .search-box { height: 58px; }
   .route-copy small { max-width: 155px; }
   .route-card { grid-template-columns: 42px 1fr auto; padding: 12px; }
