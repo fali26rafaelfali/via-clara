@@ -514,6 +514,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!activeRoute) return;
+    setRoadAlerts([]);
     void loadSafetyAlerts(origin, activeRoute.geometry.coordinates as Coordinates[]);
   }, [activeRoute]);
 
@@ -539,6 +540,8 @@ export default function Home() {
     const map = mapRef.current;
     const canvas = routeCanvas.current;
     if (!map || !canvas || !activeRoute) return;
+    const hasRouteAccident = roadAlerts.some((alert) => alert.kind === "accident");
+    const hasRouteTraffic = roadAlerts.some((alert) => alert.kind === "traffic");
     const draw = () => {
       const rect = canvas.getBoundingClientRect();
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -562,7 +565,7 @@ export default function Home() {
       });
       context.lineJoin = "round";
       context.lineCap = "round";
-      context.strokeStyle = "#0969ff";
+      context.strokeStyle = hasRouteAccident ? "#d74836" : hasRouteTraffic ? "#e0822c" : "#0969ff";
       // Keep one route stroke and taper it at distant zoom levels.
       const zoom = map.getZoom();
       context.lineWidth = zoom < 8 ? 3 : zoom < 12 ? 4 : started ? 5 : 4;
@@ -576,7 +579,7 @@ export default function Home() {
       map.off("resize", draw);
       canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
     };
-  }, [activeRoute, started]);
+  }, [activeRoute, started, roadAlerts]);
 
   async function calculateRoutes(point: Coordinates, from: Coordinates = origin) {
     setLoading(true);
@@ -1100,6 +1103,14 @@ export default function Home() {
 
   const navigationSteps = activeRoute?.legs.flatMap((leg) => leg.steps) ?? [];
   const currentInstruction = instructionFor(navigationSteps[currentStepIndex]);
+  const routeAccidents = roadAlerts.filter((alert) => alert.kind === "accident");
+  const routeTrafficAlerts = roadAlerts.filter((alert) => alert.kind === "traffic");
+  const routeTrafficLevel = routeAccidents.length ? "danger" : routeTrafficAlerts.length ? "warning" : "good";
+  const routeTrafficLabel = routeAccidents.length
+    ? `${routeAccidents.length} ${routeAccidents.length === 1 ? "accidente" : "accidentes"} en tu ruta`
+    : routeTrafficAlerts.length
+      ? `${routeTrafficAlerts.length} ${routeTrafficAlerts.length === 1 ? "retención" : "retenciones"} en tu ruta`
+      : "Sin incidencias de tráfico comunicadas";
   const tripCost = activeRoute ? (activeRoute.distance / 1000 / 100) * consumption * energyPrice : 0;
   const restAfterMinutes = travelMode === "Normal" ? 120 : 90;
   const restRecommended = Boolean(activeRoute && activeRoute.duration / 60 > restAfterMinutes);
@@ -1426,6 +1437,10 @@ export default function Home() {
 
         {activeRoute && (
           <section className="journey-assistant">
+            <div className={`journey-signal ${routeTrafficLevel}`}>
+              <span>{routeTrafficLevel === "danger" ? "⚠" : routeTrafficLevel === "warning" ? "≋" : "✓"}</span>
+              <div><small>TRÁFICO EN TU RUTA</small><strong>{routeTrafficLabel}</strong></div>
+            </div>
             <div className={`journey-signal ${routeWeather?.level ?? "good"}`}>
               <span>{routeWeather?.level === "danger" ? "⚠" : routeWeather?.level === "warning" ? "☂" : "☀"}</span>
               <div><small>TIEMPO EN LA RUTA</small><strong>{routeWeather?.label ?? "Consultando condiciones…"}</strong></div>
