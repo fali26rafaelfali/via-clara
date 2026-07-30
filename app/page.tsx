@@ -466,34 +466,6 @@ export default function Home() {
     return [...routes].sort((a, b) => b.duration - a.duration)[0];
   })();
 
-  function drawRouteOnMap(route: RouteResult, navigationMode = false) {
-    const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-    if (map.getLayer("route")) map.removeLayer("route");
-    if (map.getLayer("route-casing")) map.removeLayer("route-casing");
-    if (map.getSource("route")) map.removeSource("route");
-    const data: GeoJSON.Feature<GeoJSON.LineString> = {
-      type: "Feature",
-      properties: {},
-      geometry: route.geometry,
-    };
-    map.addSource("route", { type: "geojson", data });
-    map.addLayer({
-      id: "route-casing",
-      type: "line",
-      source: "route",
-      layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": "#ffffff", "line-width": navigationMode ? 18 : 14, "line-opacity": 1 },
-    });
-    map.addLayer({
-      id: "route",
-      type: "line",
-      source: "route",
-      layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": "#0969ff", "line-width": navigationMode ? 12 : 9, "line-opacity": 1 },
-    });
-  }
-
   useEffect(() => {
     if (!activeRoute) {
       setRouteWeather(null);
@@ -522,7 +494,9 @@ export default function Home() {
     const map = mapRef.current;
     if (!map || !activeRoute) return;
     const updateRoute = () => {
-      drawRouteOnMap(activeRoute, started);
+      if (map.getLayer("route")) map.removeLayer("route");
+      if (map.getLayer("route-casing")) map.removeLayer("route-casing");
+      if (map.getSource("route")) map.removeSource("route");
       const coords = activeRoute.geometry.coordinates as Coordinates[];
       const bounds = coords.reduce(
         (box, coordinate) => box.extend(coordinate),
@@ -541,11 +515,15 @@ export default function Home() {
     const draw = () => {
       const rect = canvas.getBoundingClientRect();
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.max(1, Math.round(rect.width * ratio));
-      canvas.height = Math.max(1, Math.round(rect.height * ratio));
+      const width = Math.max(1, Math.round(rect.width * ratio));
+      const height = Math.max(1, Math.round(rect.height * ratio));
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
       const context = canvas.getContext("2d");
       if (!context) return;
-      context.scale(ratio, ratio);
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
       context.clearRect(0, 0, rect.width, rect.height);
       const coordinates = activeRoute.geometry.coordinates as Coordinates[];
       if (coordinates.length < 2) return;
@@ -558,17 +536,17 @@ export default function Home() {
       context.lineJoin = "round";
       context.lineCap = "round";
       context.strokeStyle = "#ffffff";
-      context.lineWidth = started ? 18 : 14;
+      context.lineWidth = started ? 11 : 9;
       context.stroke();
       context.strokeStyle = "#0969ff";
-      context.lineWidth = started ? 12 : 9;
+      context.lineWidth = started ? 7 : 5;
       context.stroke();
     };
     draw();
-    map.on("move", draw);
+    map.on("render", draw);
     map.on("resize", draw);
     return () => {
-      map.off("move", draw);
+      map.off("render", draw);
       map.off("resize", draw);
       canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
     };
@@ -931,7 +909,6 @@ export default function Home() {
     const steps = activeRoute.legs.flatMap((leg) => leg.steps);
     const routeCoordinates = activeRoute.geometry.coordinates as Coordinates[];
     const map = mapRef.current;
-    drawRouteOnMap(activeRoute, true);
     originMarker.current?.getElement().style.setProperty("display", "none");
     navigationMarker.current?.remove();
     const arrow = document.createElement("div");
