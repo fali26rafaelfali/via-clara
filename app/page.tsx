@@ -182,6 +182,7 @@ function instructionFor(step?: RouteStep) {
 
 export default function Home() {
   const mapNode = useRef<HTMLDivElement>(null);
+  const routeCanvas = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const originMarker = useRef<Marker | null>(null);
   const navigationMarker = useRef<Marker | null>(null);
@@ -532,6 +533,46 @@ export default function Home() {
     if (map.isStyleLoaded()) updateRoute();
     else map.once("load", updateRoute);
   }, [activeRoute, selected, started]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const canvas = routeCanvas.current;
+    if (!map || !canvas || !activeRoute) return;
+    const draw = () => {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.max(1, Math.round(rect.width * ratio));
+      canvas.height = Math.max(1, Math.round(rect.height * ratio));
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.scale(ratio, ratio);
+      context.clearRect(0, 0, rect.width, rect.height);
+      const coordinates = activeRoute.geometry.coordinates as Coordinates[];
+      if (coordinates.length < 2) return;
+      context.beginPath();
+      coordinates.forEach((coordinate, index) => {
+        const point = map.project(coordinate);
+        if (index === 0) context.moveTo(point.x, point.y);
+        else context.lineTo(point.x, point.y);
+      });
+      context.lineJoin = "round";
+      context.lineCap = "round";
+      context.strokeStyle = "#ffffff";
+      context.lineWidth = started ? 18 : 14;
+      context.stroke();
+      context.strokeStyle = "#0969ff";
+      context.lineWidth = started ? 12 : 9;
+      context.stroke();
+    };
+    draw();
+    map.on("move", draw);
+    map.on("resize", draw);
+    return () => {
+      map.off("move", draw);
+      map.off("resize", draw);
+      canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+    };
+  }, [activeRoute, started]);
 
   async function calculateRoutes(point: Coordinates, from: Coordinates = origin) {
     setLoading(true);
@@ -1139,6 +1180,7 @@ export default function Home() {
     <main className={`app-shell ${started ? "navigating" : ""}`}>
       <section className="map-wrap" aria-label="Mapa real de navegación">
         <div ref={mapNode} className="map-canvas" />
+        <canvas ref={routeCanvas} className="route-overlay" aria-hidden="true" />
         <header className="brand">
           <span className="brand-mark">V</span>
           <div><strong>Vía Clara</strong><small>Tu ruta, a tu manera</small></div>
